@@ -1,6 +1,7 @@
 """Validator forward pass: query miners for proofs, verify, score."""
 from __future__ import annotations
 
+import json
 import time
 
 import bittensor as bt
@@ -96,6 +97,27 @@ def _verify_response(
     except Exception as e:
         bt.logging.warning(f"Proof verification error: {e}")
         is_valid = False
+
+    # M-11: Validate epoch and nonce match current challenge
+    if is_valid and response.public_inputs_json:
+        try:
+            pub_inputs = json.loads(response.public_inputs_json)
+            proof_epoch = pub_inputs.get("epoch")
+            proof_nonce = pub_inputs.get("challenge_nonce")
+            if proof_epoch is not None and proof_epoch != response.epoch:
+                bt.logging.warning(f"Epoch mismatch: proof={proof_epoch}, expected={response.epoch}")
+                is_valid = False
+            if proof_nonce is not None and proof_nonce != response.challenge_nonce:
+                bt.logging.warning(f"Nonce mismatch: proof={proof_nonce}, expected={response.challenge_nonce}")
+                is_valid = False
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # H-11: Log zkVerify attestation status (soft enforcement)
+    if response.zkverify_job_id:
+        bt.logging.debug(f"zkVerify job_id: {response.zkverify_job_id}")
+    elif is_valid:
+        bt.logging.trace(f"Valid proof without zkVerify attestation")
 
     return {
         "proof_valid": is_valid,

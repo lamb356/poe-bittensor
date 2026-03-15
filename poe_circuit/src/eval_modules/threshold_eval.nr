@@ -1,4 +1,5 @@
 use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
+use crate::eval_modules::field_math::bounded_lt;
 
 // ============================================================
 // Threshold Evaluation (binary pass/fail scoring)
@@ -14,7 +15,7 @@ impl EvalFunction for ThresholdEval {
         let threshold = params[0];
         let pass_score = params[1];
         // If response > threshold, score = pass_score, else 0
-        if threshold.lt(response_hash) {
+        if bounded_lt::<48>(threshold, response_hash) {
             pass_score
         } else {
             0

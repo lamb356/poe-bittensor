@@ -21,6 +21,7 @@ pub struct WitnessData {
     // Public inputs
     pub input_commitment: String,
     pub weight_commitment: String,
+    pub score_commitment: String,
     pub epoch: String,
     pub validator_id: String,
     pub challenge_nonce: String,

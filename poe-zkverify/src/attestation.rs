@@ -105,23 +105,69 @@ impl AttestationReader {
     }
 }
 
-/// Verify a Merkle path locally without trusting the relayer.
+/// Verify a Merkle path locally using Keccak256 (zkVerify's Merkle hash).
 ///
-/// NOTE: This is a stub. Full implementation is blocked on zkVerify
-/// documenting their exact Merkle hash function (Poseidon2 vs Keccak256
-/// vs a domain-separated variant). Until then, we log a warning and
-/// return the unverified result from is_proof_attested().
+/// The Merkle tree follows EigenDA's Merkle.sol convention:
+/// siblings are sorted lexicographically before hashing.
 pub fn verify_merkle_path_local(
     merkle_path: &MerklePath,
     leaf_digest: &str,
 ) -> bool {
-    tracing::warn!(
-        root = %merkle_path.root,
-        leaf = %leaf_digest,
-        path_len = merkle_path.path.len(),
-        "Merkle path verification not yet implemented - trusting relayer response"
-    );
-    true
+    use sha3::{Digest, Keccak256};
+
+    let current = match hex_to_bytes32(leaf_digest) {
+        Some(b) => b,
+        None => {
+            tracing::error!(leaf = %leaf_digest, "Invalid leaf digest hex");
+            return false;
+        }
+    };
+
+    let mut current = current;
+    for sibling_hex in &merkle_path.path {
+        let sibling = match hex_to_bytes32(sibling_hex) {
+            Some(b) => b,
+            None => {
+                tracing::error!(sibling = %sibling_hex, "Invalid sibling hex");
+                return false;
+            }
+        };
+
+        // EigenDA Merkle.sol sorts lexicographically
+        let (left, right) = if current <= sibling {
+            (current, sibling)
+        } else {
+            (sibling, current)
+        };
+
+        let mut hasher = Keccak256::new();
+        hasher.update(left);
+        hasher.update(right);
+        current = hasher.finalize().into();
+    }
+
+    // Compare computed root with claimed root
+    let expected_root = match hex_to_bytes32(&merkle_path.root) {
+        Some(b) => b,
+        None => {
+            tracing::error!(root = %merkle_path.root, "Invalid root hex");
+            return false;
+        }
+    };
+
+    current == expected_root
+}
+
+/// Parse a hex string (with or without 0x prefix) into a 32-byte array.
+fn hex_to_bytes32(s: &str) -> Option<[u8; 32]> {
+    let hex_str = s.strip_prefix("0x").unwrap_or(s);
+    if hex_str.len() != 64 {
+        return None;
+    }
+    let bytes = hex::decode(hex_str).ok()?;
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    Some(arr)
 }
 
 #[cfg(test)]
@@ -234,5 +280,31 @@ mod tests {
         assert_eq!(path.root, "0xroot");
         assert_eq!(path.path.len(), 3);
         assert_eq!(path.leaf_index, 7);
+    }
+
+    #[tokio::test]
+    async fn test_verify_merkle_path_simple() {
+        use sha3::{Digest, Keccak256};
+
+        // Build a simple 2-leaf tree
+        let leaf_a = [0x11u8; 32];
+        let leaf_b = [0x22u8; 32];
+
+        // Sort and hash
+        let (left, right) = if leaf_a <= leaf_b { (leaf_a, leaf_b) } else { (leaf_b, leaf_a) };
+        let mut hasher = Keccak256::new();
+        hasher.update(left);
+        hasher.update(right);
+        let root: [u8; 32] = hasher.finalize().into();
+
+        let path = MerklePath {
+            root: format!("0x{}", hex::encode(root)),
+            path: vec![format!("0x{}", hex::encode(leaf_b))],
+            leaf_index: 0,
+        };
+
+        assert!(verify_merkle_path_local(&path, &format!("0x{}", hex::encode(leaf_a))));
+        // Wrong leaf should fail
+        assert!(!verify_merkle_path_local(&path, &format!("0x{}", hex::encode([0x33u8; 32]))));
     }
 }

@@ -7,6 +7,22 @@
 
 pub global FIXED_SCALE: Field = 1000000;
 
+// Efficient comparison: uses range checks instead of Field.lt() (~435 gates -> ~ceil(BITS/14) gates)
+unconstrained fn lt_hint(a: Field, b: Field) -> bool {
+    a.lt(b)
+}
+
+pub fn bounded_lt<let BITS: u32>(a: Field, b: Field) -> bool {
+    // Safety: lt_hint provides the comparison direction; range checks prove it correct
+    let result = unsafe { lt_hint(a, b) };
+    if result {
+        (b - a - 1).assert_max_bit_size::<BITS>();
+    } else {
+        (a - b).assert_max_bit_size::<BITS>();
+    }
+    result
+}
+
 /// Fixed-point multiplication: (a * b) / SCALE
 pub fn fixed_mul(a: Field, b: Field) -> Field {
     (a * b) / FIXED_SCALE
@@ -32,7 +48,7 @@ pub fn fixed_div(a: Field, b: Field) -> Field {
 pub fn exp_neg_approx(x: Field) -> Field {
     // Clamp threshold: x >= 2.0 (Taylor diverges badly beyond x=1.5)
     let clamp_threshold = 2 * FIXED_SCALE;
-    if !x.lt(clamp_threshold) {
+    if !bounded_lt::<32>(x, clamp_threshold) {
         // x > 3.0: return baseline (0.045 in fixed-point)
         45000
     } else {
@@ -44,6 +60,10 @@ pub fn exp_neg_approx(x: Field) -> Field {
         //   positive_terms = 1 + x^2/2 + x^4/24
         //   negative_terms = x + x^3/6
         //   result = positive - negative (only if positive > negative)
+        //
+        // NOTE: positive/negative use Field division (/ 2, / 6, / 24)
+        // which produces modular inverses, not bounded integers.
+        // Cannot use bounded_lt here; .lt() compares canonical Field values.
         let positive = FIXED_SCALE + x2 / 2 + x4 / 24;
         let negative = x + x3 / 6;
         if negative.lt(positive) {
@@ -67,6 +87,76 @@ pub fn sn8_time_weight(days_ago: Field) -> Field {
     // w = 0.045 + 0.955 * exp_val
     // 0.045 = 45000, 0.955 = 955000
     45000 + fixed_mul(955000, exp_val)
+}
+
+// ============================================================
+// Signed fixed-point arithmetic
+// Two-field representation: (magnitude, is_negative)
+// This enables negative PnL representation in SN8 eval.
+// ============================================================
+
+pub struct SignedField {
+    pub magnitude: Field,
+    pub is_negative: bool,
+}
+
+pub fn signed_pos(val: Field) -> SignedField {
+    SignedField { magnitude: val, is_negative: false }
+}
+
+pub fn signed_neg(val: Field) -> SignedField {
+    SignedField { magnitude: val, is_negative: true }
+}
+
+pub fn signed_zero() -> SignedField {
+    SignedField { magnitude: 0, is_negative: false }
+}
+
+/// Add two signed values
+pub fn signed_add(a: SignedField, b: SignedField) -> SignedField {
+    if a.is_negative == b.is_negative {
+        // Same sign: add magnitudes, keep sign
+        SignedField { magnitude: a.magnitude + b.magnitude, is_negative: a.is_negative }
+    } else {
+        // Different signs: subtract smaller from larger
+        if bounded_lt::<48>(a.magnitude, b.magnitude) {
+            // |b| > |a|, result has b's sign
+            SignedField { magnitude: b.magnitude - a.magnitude, is_negative: b.is_negative }
+        } else {
+            // |a| >= |b|, result has a's sign
+            SignedField { magnitude: a.magnitude - b.magnitude, is_negative: a.is_negative }
+        }
+    }
+}
+
+/// Subtract: a - b = a + (-b)
+pub fn signed_sub(a: SignedField, b: SignedField) -> SignedField {
+    signed_add(a, SignedField { magnitude: b.magnitude, is_negative: !b.is_negative })
+}
+
+/// Multiply two signed values (fixed-point)
+pub fn signed_mul(a: SignedField, b: SignedField) -> SignedField {
+    SignedField {
+        magnitude: fixed_mul(a.magnitude, b.magnitude),
+        is_negative: a.is_negative != b.is_negative,
+    }
+}
+
+/// Compare: a < b
+pub fn signed_lt(a: SignedField, b: SignedField) -> bool {
+    if a.is_negative & !b.is_negative {
+        // negative < positive (unless both zero)
+        (a.magnitude != 0) | (b.magnitude != 0)
+    } else if !a.is_negative & b.is_negative {
+        // positive >= negative
+        false
+    } else if a.is_negative & b.is_negative {
+        // Both negative: -|a| < -|b| iff |a| > |b|
+        bounded_lt::<48>(b.magnitude, a.magnitude)
+    } else {
+        // Both positive
+        bounded_lt::<48>(a.magnitude, b.magnitude)
+    }
 }
 
 // ============================================================
@@ -148,4 +238,40 @@ fn test_sn8_time_weight_old() {
     // Expect ~88000. Accept [45000, 500000] (wide range due to Taylor error)
     assert(!w.lt(45000), "Old weight should be >= baseline");
     assert(w.lt(500001), "Old weight should be bounded");
+}
+
+#[test]
+fn test_signed_add_both_positive() {
+    let a = signed_pos(100);
+    let b = signed_pos(200);
+    let c = signed_add(a, b);
+    assert(c.magnitude == 300, "100 + 200 = 300");
+    assert(!c.is_negative, "Should be positive");
+}
+
+#[test]
+fn test_signed_add_opposite_signs() {
+    let a = signed_pos(300);
+    let b = signed_neg(100);
+    let c = signed_add(a, b);
+    assert(c.magnitude == 200, "300 + (-100) = 200");
+    assert(!c.is_negative, "Should be positive");
+}
+
+#[test]
+fn test_signed_add_negative_result() {
+    let a = signed_pos(100);
+    let b = signed_neg(300);
+    let c = signed_add(a, b);
+    assert(c.magnitude == 200, "100 + (-300) = -200");
+    assert(c.is_negative, "Should be negative");
+}
+
+#[test]
+fn test_signed_lt() {
+    assert(signed_lt(signed_neg(5), signed_pos(3)), "-5 < 3");
+    assert(signed_lt(signed_pos(2), signed_pos(5)), "2 < 5");
+    assert(!signed_lt(signed_pos(5), signed_pos(2)), "!(5 < 2)");
+    assert(signed_lt(signed_neg(5), signed_neg(2)), "-5 < -2");
+    assert(!signed_lt(signed_neg(2), signed_neg(5)), "!(-2 < -5)");
 }

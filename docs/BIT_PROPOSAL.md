@@ -63,14 +63,14 @@ PoE operates in the validator's forward() loop, between miner evaluation and wei
 |-----------|-------|
 | Backend | UltraHonk (Barretenberg, no trusted setup) |
 | Field | BN254 scalar field |
-| Circuit size | 5,812 UltraHonk gates (502 ACIR opcodes) |
+| Circuit size | 7,845 UltraHonk gates (662 ACIR opcodes) |
 | Proof size | 14,244 bytes |
 | Proving time | <0.5s (64 miners, commodity hardware) |
 | Verification time | ~45ms constant |
 | In-circuit hash | Poseidon2 (sponge construction) |
 | Off-circuit hash | BLAKE3 (response hashing) |
 
-### Public Inputs (5 fields)
+### Public Inputs (6 fields)
 
 1. `input_commitment`: Poseidon2 hash binding miner UIDs, response hashes, challenge nonce, epoch, and salt
 2. `weight_commitment`: Poseidon2 hash binding weights, validator ID, and epoch
@@ -117,14 +117,14 @@ ZK proofs provide the strongest guarantee: mathematical certainty that evaluatio
 ### Why UltraHonk?
 
 - No trusted setup (unlike Groth16)
-- Fast proving (<0.5s for 5,812 gates)
+- Fast proving (<0.5s for 7,845 gates)
 - Constant verification time (~45ms)
 - Native support on zkVerify chain
 - 2.5x faster than UltraPlonk with equivalent security
 
 ### Key Optimization: assert_max_bit_size
 
-The circuit achieved an 84% gate reduction (37,443 to 5,812) by replacing `Field.lt()` comparisons with bounded range checks via `assert_max_bit_size`. This technique exploits UltraHonk's lookup tables: a 14-bit range check costs 1 gate (lookup), while `Field.lt()` costs ~435 gates (254-bit field decomposition). This optimization applies to any Noir circuit on UltraHonk.
+The circuit achieved an 79% gate reduction (37,443 to 7,845) by replacing `Field.lt()` comparisons with bounded range checks via `assert_max_bit_size`. This technique exploits UltraHonk's lookup tables: a 14-bit range check costs 1 gate (lookup), while `Field.lt()` costs ~435 gates (254-bit field decomposition). This optimization applies to any Noir circuit on UltraHonk.
 
 ## Backwards Compatibility
 
@@ -144,16 +144,16 @@ Complete implementation: https://github.com/lamb356/poe-bittensor
 
 | Component | Location | Tests |
 |-----------|----------|-------|
-| Noir circuit (5,812 gates) | `poe_circuit/` | 54 tests |
+| Noir circuit (7,845 gates) | `poe_circuit/` | 60 tests |
 | Rust witness generator | `poe-witness/` | 9 tests |
 | Python validator package | `poe-validator/` | 19 tests |
 | Bittensor subnet scaffold | `poe-subnet/` | 37 tests |
-| zkVerify bridge | `poe-zkverify/` | 22 tests |
+| zkVerify bridge | `poe-zkverify/` | 23 tests |
 | Testnet campaign tools | `testnet/` | 15 tests |
 | TLA+ formal verification | `tla/` | 110M states, 0 violations |
 | Z3 arithmetic proofs | `tla/` | 6 invariants, all PASS |
 
-**Total: 156+ tests, all passing.**
+**Total: 166+ tests, all passing.**
 
 ## Security Considerations
 
@@ -172,7 +172,7 @@ The TLA+ spec verifies safety against three copier strategies:
 
 1. **Selective evaluation**: Validator evaluates a subset of miners and fabricates responses for the rest. Mitigated by: response hashes committed via BLAKE3, which is collision-resistant.
 2. **Timing attacks**: Validator observes other validators' weights before generating their own proof. Mitigated by: CR4 time-lock encryption hides weights until after the commitment window.
-3. **Proof generation DoS**: Attacker submits computationally expensive inputs to slow down proof generation. Mitigated by: circuit is fixed-size (5,812 gates), proving time is bounded.
+3. **Proof generation DoS**: Attacker submits computationally expensive inputs to slow down proof generation. Mitigated by: circuit is fixed-size (7,845 gates), proving time is bounded.
 
 ## Copyright
 

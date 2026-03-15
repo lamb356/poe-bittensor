@@ -108,7 +108,7 @@ impl EvalFunction for MyEval {
 | Fixed-point division | ~200 per miner | ~0.5s |
 | SN8 PnL (30 checkpoints) | ~400 per miner | ~0.8s |
 
-The base Lite PoE circuit is 5,812 gates. Eval modules add gates on top.
+The base Lite PoE circuit is 7,845 gates. Eval modules add gates on top.
 
 ## Subnet Compatibility Matrix
 

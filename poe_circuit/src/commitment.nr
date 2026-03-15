@@ -81,3 +81,27 @@ pub fn compute_weight_commitment(
     preimage[6] = epoch;
     Poseidon2::hash(preimage, 7)
 }
+
+pub fn compute_score_commitment(
+    scores: [Field; NUM_MINERS],
+    response_hashes: [Field; NUM_MINERS],
+    epoch: Field,
+) -> Field {
+    // H-01: Range check scores before packing
+    for i in 0..NUM_MINERS {
+        scores[i].assert_max_bit_size::<16>();
+    }
+    // Pack scores (u16) same as UIDs: 15 per Field element
+    let packed_scores = pack_uids(scores);
+    // Preimage: 5 packed scores + 64 response_hashes + epoch = 70 elements
+    let preimage_len: u32 = 5 + NUM_MINERS + 1;
+    let mut preimage: [Field; 70] = [0; 70];
+    for i in 0..5 {
+        preimage[i] = packed_scores[i];
+    }
+    for i in 0..NUM_MINERS {
+        preimage[5 + i] = response_hashes[i];
+    }
+    preimage[5 + NUM_MINERS] = epoch;
+    Poseidon2::hash(preimage, preimage_len)
+}

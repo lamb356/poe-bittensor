@@ -1,20 +1,9 @@
 use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
-use crate::eval_modules::field_math::{fixed_mul, fixed_div, sn8_time_weight};
-
-// ============================================================
-// KNOWN LIMITATION (H-03, audit ref: 2026-03-14)
-//
-// Unsigned Field cannot represent negative PnL values.
-// Drawdown detection via compute_max_drawdown() only works for
-// non-negative PnL series. With unsigned arithmetic, negative
-// daily PnL wraps to large Field values, making drawdown
-// comparisons meaningless.
-//
-// Impact: Miners with negative PnL may not be penalized.
-// Fix: Signed fixed-point arithmetic (out of scope for this patch).
-// Tracking: SN8 currently weights PnL at 0 in production,
-// so this does not affect live scoring.
-// ============================================================
+use crate::eval_modules::field_math::{
+    fixed_mul, fixed_div, sn8_time_weight, bounded_lt,
+    SignedField, signed_pos, signed_neg, signed_zero,
+    signed_add, signed_sub, signed_mul, signed_lt,
+};
 
 // ============================================================
 // SN8 (Taoshi PTN) PnL Evaluation Module
@@ -67,55 +56,69 @@ impl EvalFunction for SN8PnlEval {
 }
 
 /// Compute time-weighted PnL score for a single miner.
-/// daily_pnls: PnL per day in fixed-point (positive = profit, negative = loss)
+/// daily_pnls: PnL per day as SignedField (positive = profit, negative = loss)
 /// time_weights: pre-computed decay weights in fixed-point
 /// Returns: score in fixed-point, or 0 if max drawdown >= 10%
 pub fn sn8_pnl_score(
-    daily_pnls: [Field; NUM_CHECKPOINTS],
+    daily_pnls: [SignedField; NUM_CHECKPOINTS],
     time_weights: [Field; NUM_CHECKPOINTS],
 ) -> Field {
-    // Step 1: Weighted average PnL
-    let mut weighted_sum: Field = 0;
+    // Accumulate positive and negative weighted sums separately.
+    // This avoids calling bounded_lt on non-integer Field values
+    // that arise from fixed_mul with Taylor-approximated weights.
+    let mut pos_sum: Field = 0;
+    let mut neg_sum: Field = 0;
     let mut weight_sum: Field = 0;
     for i in 0..NUM_CHECKPOINTS {
-        weighted_sum += fixed_mul(time_weights[i], daily_pnls[i]);
+        let weighted_mag = fixed_mul(daily_pnls[i].magnitude, time_weights[i]);
+        if daily_pnls[i].is_negative {
+            neg_sum += weighted_mag;
+        } else {
+            pos_sum += weighted_mag;
+        }
         weight_sum += time_weights[i];
     }
     assert(weight_sum != 0, "Time weight sum must be nonzero");
-    let score = fixed_div(weighted_sum, weight_sum);
 
-    // Step 2: Check max drawdown
-    let mdd = compute_max_drawdown(daily_pnls);
-
-    // If drawdown >= 10%, score = 0
-    if DRAWDOWN_THRESHOLD.lt(mdd) {
+    // Net PnL direction: compare pos_sum vs neg_sum using Field.lt()
+    // (safe here because both are sums of non-negative Field products)
+    if pos_sum.lt(neg_sum) | (pos_sum == neg_sum) {
+        // Negative or zero overall PnL: score = 0
         0
     } else {
-        score
+        let net = pos_sum - neg_sum;
+        let score = fixed_div(net, weight_sum);
+
+        // Check max drawdown
+        let mdd = compute_max_drawdown(daily_pnls);
+        if bounded_lt::<48>(DRAWDOWN_THRESHOLD, mdd.magnitude) & !mdd.is_negative {
+            0
+        } else {
+            score
+        }
     }
 }
 
 /// Compute maximum drawdown from daily PnL series.
 /// Drawdown = (peak - current) as a fraction of initial capital (FIXED_SCALE = 100%).
-/// Returns max drawdown in fixed-point.
-pub fn compute_max_drawdown(pnls: [Field; NUM_CHECKPOINTS]) -> Field {
-    let mut cumulative: Field = 0;
-    let mut peak: Field = 0;
-    let mut max_dd: Field = 0;
+/// Returns max drawdown as SignedField.
+pub fn compute_max_drawdown(pnls: [SignedField; NUM_CHECKPOINTS]) -> SignedField {
+    let mut cumulative = signed_zero();
+    let mut peak = signed_zero();
+    let mut max_dd = signed_zero();
 
     for i in 0..NUM_CHECKPOINTS {
-        cumulative += pnls[i];
+        cumulative = signed_add(cumulative, pnls[i]);
 
-        // Update peak
-        if peak.lt(cumulative) {
+        // Update peak if cumulative > peak
+        if signed_lt(peak, cumulative) {
             peak = cumulative;
         }
 
-        // Drawdown = peak - current (always >= 0 when peak >= cumulative)
-        // Only compute when peak > cumulative
-        if cumulative.lt(peak) {
-            let dd = peak - cumulative;
-            if max_dd.lt(dd) {
+        // Drawdown = peak - cumulative
+        if signed_lt(cumulative, peak) {
+            let dd = signed_sub(peak, cumulative);
+            if signed_lt(max_dd, dd) {
                 max_dd = dd;
             }
         }
@@ -135,12 +138,12 @@ pub fn verify_time_weights(
         let expected = sn8_time_weight(i as Field);
         // |actual - expected| < tolerance
         let actual = time_weights[i];
-        if expected.lt(actual) {
+        if bounded_lt::<48>(expected, actual) {
             let diff = actual - expected;
-            assert(diff.lt(tolerance), "Time weight too high");
+            assert(bounded_lt::<48>(diff, tolerance), "Time weight too high");
         } else {
             let diff = expected - actual;
-            assert(diff.lt(tolerance), "Time weight too low");
+            assert(bounded_lt::<48>(diff, tolerance), "Time weight too low");
         }
     }
 }
@@ -161,7 +164,7 @@ fn test_time_weights() -> [Field; NUM_CHECKPOINTS] {
 #[test]
 fn test_sn8_constant_pnl() {
     // All days have same PnL: score should equal that PnL
-    let pnls: [Field; NUM_CHECKPOINTS] = [50000; NUM_CHECKPOINTS]; // 0.05 daily
+    let pnls: [SignedField; NUM_CHECKPOINTS] = [signed_pos(50000); NUM_CHECKPOINTS]; // 0.05 daily
     let weights = test_time_weights();
     let score = sn8_pnl_score(pnls, weights);
     // Score should be ~50000 (weighted average of identical values = that value)
@@ -173,9 +176,9 @@ fn test_sn8_constant_pnl() {
 #[test]
 fn test_sn8_all_positive_no_drawdown() {
     // All positive PnL, no drawdown -> score > 0
-    let mut pnls: [Field; NUM_CHECKPOINTS] = [0; NUM_CHECKPOINTS];
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
     for i in 0..NUM_CHECKPOINTS {
-        pnls[i] = (10000 + i * 1000) as Field; // increasing daily PnL
+        pnls[i] = signed_pos((10000 + i * 1000) as Field); // increasing daily PnL
     }
     let weights = test_time_weights();
     let score = sn8_pnl_score(pnls, weights);
@@ -185,68 +188,49 @@ fn test_sn8_all_positive_no_drawdown() {
 
 #[test]
 fn test_sn8_drawdown_kills_score() {
-    // Start high, crash: drawdown > 10%
-    let mut pnls: [Field; NUM_CHECKPOINTS] = [0; NUM_CHECKPOINTS];
+    // Start high, crash with negative PnL: drawdown > 10%
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
     // First 10 days: +50000 each (cumulative: 500000 = 50% gain)
     for i in 0..10 {
-        pnls[i] = 50000;
+        pnls[i] = signed_pos(50000);
     }
     // Next 20 days: -30000 each (cumulative drop: 600000 from peak)
-    // That's a 120% drawdown from peak => well above 10%
+    // Drawdown = 600000 > DRAWDOWN_THRESHOLD (100000) => score = 0
     for i in 10..NUM_CHECKPOINTS {
-        // Use Field wrapping: negative PnL represented as large Field
-        // Actually, in our fixed-point Field arithmetic, we need to handle
-        // "negative" PnL carefully. Let's use a simpler test:
-        // Peak at day 10: cumulative = 500000
-        // After day 10: cumulative drops by 30000/day for 20 days = 600000
-        // Drawdown = 600000 > DRAWDOWN_THRESHOLD (100000) => score = 0
-        //
-        // But wait: Field subtraction wraps modulo p.
-        // We need to represent losses differently.
-        // Convention: PnL > FIXED_SCALE/2 means negative
-        // For now, use 0 PnL after crash (drawdown = 0, stays at peak)
-        pnls[i] = 0;
+        pnls[i] = signed_neg(30000);
     }
-    // This won't trigger drawdown since all PnL >= 0
-    // Let me rethink: with unsigned Field, we can't represent negative PnL directly.
-    // For this test, use a scenario where we DON'T test negative PnL.
-    // Instead test: the drawdown function works with cumulative increases.
-
-    // Actually, test the drawdown function separately with known values.
     let weights = test_time_weights();
     let score = sn8_pnl_score(pnls, weights);
-    // With all non-negative PnL, drawdown = 0, score should be positive
-    assert(!score.lt(1), "Non-negative PnL should give positive score");
+    assert(score == 0, "Large drawdown should kill score");
 }
 
 #[test]
 fn test_sn8_max_drawdown_zero_for_increasing() {
     // Monotonically increasing cumulative: drawdown = 0
-    let mut pnls: [Field; NUM_CHECKPOINTS] = [0; NUM_CHECKPOINTS];
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
     for i in 0..NUM_CHECKPOINTS {
-        pnls[i] = 10000; // constant positive
+        pnls[i] = signed_pos(10000); // constant positive
     }
     let mdd = compute_max_drawdown(pnls);
-    assert(mdd == 0, "No drawdown for increasing cumulative");
+    assert(mdd.magnitude == 0, "No drawdown for increasing cumulative");
 }
 
 #[test]
 fn test_sn8_max_drawdown_detected() {
-    // Go up then flat: cumulative rises then stays
-    // Add a dip: up 5 days, dip 2 days, up again
-    let mut pnls: [Field; NUM_CHECKPOINTS] = [10000; NUM_CHECKPOINTS]; // base positive
-    // Override days 5-6 with zero to create a relative "dip" from peak growth rate
-    // Actually need actual decrease. Can't represent negative in unsigned Field.
-    //
-    // For unsigned PnL: drawdown only happens if cumulative drops below peak.
-    // With all-positive PnL, cumulative only increases => drawdown = 0.
-    // To test drawdown we need signed arithmetic.
-    //
-    // DESIGN NOTE: In production, we'd use a signed fixed-point representation
-    // (e.g., values < FIXED_SCALE/2 are positive, >= are negative).
-    // For now, test with zero PnL periods creating "flat" (no drawdown).
+    // Go up then down with negative PnL: real drawdown
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
+    // First 15 days: +20000 each (cumulative: 300000)
+    for i in 0..15 {
+        pnls[i] = signed_pos(20000);
+    }
+    // Next 15 days: -10000 each (cumulative drops by 150000 from peak)
+    for i in 15..NUM_CHECKPOINTS {
+        pnls[i] = signed_neg(10000);
+    }
     let mdd = compute_max_drawdown(pnls);
-    assert(mdd == 0, "All-positive PnL has zero drawdown");
+    // Drawdown should be 150000 (peak 300000, final 150000)
+    assert(mdd.magnitude == 150000, "Drawdown should be 150000");
+    assert(!mdd.is_negative, "Drawdown should be positive");
 }
 
 #[test]
@@ -260,14 +244,14 @@ fn test_sn8_time_weight_verification() {
 fn test_sn8_recent_weighted_higher() {
     // Recent days have higher weight -> if recent PnL is higher,
     // score should be above simple average
-    let mut pnls: [Field; NUM_CHECKPOINTS] = [0; NUM_CHECKPOINTS];
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
     // Old days (0-14): low PnL
     for i in 0..15 {
-        pnls[i] = 10000; // 0.01
+        pnls[i] = signed_pos(10000); // 0.01
     }
     // Recent days (15-29): high PnL
     for i in 15..NUM_CHECKPOINTS {
-        pnls[i] = 100000; // 0.10
+        pnls[i] = signed_pos(100000); // 0.10
     }
     let weights = test_time_weights();
     let score = sn8_pnl_score(pnls, weights);
@@ -275,6 +259,34 @@ fn test_sn8_recent_weighted_higher() {
     // Simple average would be (15*10000 + 15*100000)/30 = 55000
     // Time-weighted should be > 55000 since recent (high PnL) days weighted more
     assert(!score.lt(55001), "Time-weighted score should favor recent high PnL");
+}
+
+#[test]
+fn test_sn8_negative_pnl_kills_score() {
+    // All negative PnL: score should be 0
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
+    for i in 0..NUM_CHECKPOINTS {
+        pnls[i] = signed_neg(10000); // -0.01 daily
+    }
+    let weights = test_time_weights();
+    let score = sn8_pnl_score(pnls, weights);
+    assert(score == 0, "All-negative PnL should give zero score");
+}
+
+#[test]
+fn test_sn8_drawdown_with_losses() {
+    // Go up then crash: positive then negative PnL
+    let mut pnls: [SignedField; NUM_CHECKPOINTS] = [signed_zero(); NUM_CHECKPOINTS];
+    for i in 0..10 {
+        pnls[i] = signed_pos(50000); // +5% daily for 10 days
+    }
+    for i in 10..NUM_CHECKPOINTS {
+        pnls[i] = signed_neg(30000); // -3% daily for 20 days
+    }
+    let weights = test_time_weights();
+    let score = sn8_pnl_score(pnls, weights);
+    // Drawdown = peak(500000) - final(500000-600000=-100000) = 600000 > 100000 threshold
+    assert(score == 0, "Large drawdown from losses should kill score");
 }
 
 #[test]

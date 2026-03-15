@@ -1,4 +1,5 @@
 use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
+use crate::eval_modules::field_math::bounded_lt;
 
 // ============================================================
 // Distance Evaluation (OCR-style inverted distance scoring)
@@ -17,14 +18,14 @@ impl EvalFunction for DistanceEval {
         let max_score = params[1];
 
         // Absolute difference: |response_hash - expected|
-        let distance = if expected.lt(response_hash) {
+        let distance = if bounded_lt::<48>(expected, response_hash) {
             response_hash - expected
         } else {
             expected - response_hash
         };
 
         // Inverted distance, clamped to 0
-        if distance.lt(max_score) {
+        if bounded_lt::<48>(distance, max_score) {
             max_score - distance
         } else {
             0

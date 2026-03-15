@@ -77,11 +77,33 @@ fn main(
     weight_preimage[6] = epoch;
     let wc = Poseidon2::hash(weight_preimage, 7);
 
-    // Suppress unused variable warning
-    let _scores_used = scores[0];
+    // H-01: Range check scores before packing
+    for i in 0..NUM_MINERS {
+        scores[i].assert_max_bit_size::<16>();
+    }
+
+    // Score commitment: Poseidon2(packed_scores[5] || response_hashes[64] || epoch)
+    // Preimage: 5 + 64 + 1 = 70 elements
+    let packed_scores = pack_u16s(scores);
+    let mut score_preimage: [Field; 70] = [0; 70];
+    for i in 0..5 {
+        score_preimage[i] = packed_scores[i];
+    }
+    for i in 0..NUM_MINERS {
+        score_preimage[5 + i] = response_hashes[i];
+    }
+    score_preimage[5 + NUM_MINERS] = epoch;
+    let sc = Poseidon2::hash(score_preimage, 70);
 
     println(f"input_commitment={ic}");
     println(f"weight_commitment={wc}");
+    println(f"score_commitment={sc}");
+}
+
+unconstrained fn floor_div(a: Field, b: Field) -> Field {
+    let a_u: u64 = a as u64;
+    let b_u: u64 = b as u64;
+    (a_u / b_u) as Field
 }
 
 #[test]
@@ -101,7 +123,8 @@ fn test_commitment_helper() {
     }
     let mut weights: [Field; NUM_MINERS] = [0; NUM_MINERS];
     for i in 0..NUM_MINERS {
-        weights[i] = (scores[i] * 65535) / total;
+        // Safety: floor_div provides integer division for test weight computation
+        weights[i] = unsafe { floor_div(scores[i] * 65535, total) };
     }
 
     main(

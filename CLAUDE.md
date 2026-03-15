@@ -28,9 +28,11 @@ evaluation functions on miner outputs, rather than copying weights from other va
 - UltraHonk verification: ~45ms constant regardless of circuit size
 - Poseidon2 for in-circuit hashing. NEVER use SHA-256 or BLAKE3 in-circuit (~20x more expensive)
 - NEVER use Field.lt() for range checks in UltraHonk circuits. Use assert_max_bit_size instead. Field.lt() costs ~435 gates per call; assert_max_bit_size costs ~1 gate per 14-bit chunk (UltraHonk lookup tables). This is a 4x+ gate reduction.
+- Circuit has 6 public inputs: input_commitment, weight_commitment, score_commitment, epoch, validator_id, challenge_nonce
 - Field elements are BN254 scalar field
 
 ## Critical Rules
+- SN8 eval uses SignedField for negative PnL (magnitude + is_negative bool)
 - BLAKE3 is used OFF-circuit only (response hashing). Poseidon2 IN-circuit only.
 - All proofs use UltraHonk backend (not UltraPlonk -- 2.5x slower, no benefit)
 - Gate count estimates must be verified against `bb gates --scheme ultra_honk` output
@@ -43,7 +45,7 @@ evaluation functions on miner outputs, rather than copying weights from other va
 | Circuit | Miners | ACIR Opcodes | UltraHonk Gates |
 |---------|--------|-------------|-----------------|
 | poe_minimal | 8 | 923 | 5,675 |
-| poe_circuit | 64 | 502 | 5,812 (optimized + H-01 range checks) |
+| poe_circuit | 64 | 662 | 7,845 (optimized + H-01 + C-01 score commitment) |
 
 ## Build Order
 Piece 0: Minimal circuit (8 miners) -- COMPLETE

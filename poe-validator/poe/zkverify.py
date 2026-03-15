@@ -105,16 +105,16 @@ class ZkVerifySubmitter:
             )
 
     def _extract_public_inputs(self) -> bytes:
-        """Extract 5 public inputs from Prover.toml as 32-byte big-endian fields.
+        """Extract 6 public inputs from Prover.toml as 32-byte big-endian fields.
 
-        Public inputs: input_commitment, weight_commitment, epoch,
-        validator_id, challenge_nonce.
+        Public inputs: input_commitment, weight_commitment, score_commitment,
+        epoch, validator_id, challenge_nonce.
         """
         prover_toml = os.path.join(
             self.poe_config.circuit_dir, "Prover.toml"
         )
         field_names = [
-            "input_commitment", "weight_commitment",
+            "input_commitment", "weight_commitment", "score_commitment",
             "epoch", "validator_id", "challenge_nonce",
         ]
         values = {}
@@ -127,9 +127,9 @@ class ZkVerifySubmitter:
                             values[name] = int(val, 16)
                         else:
                             values[name] = int(val)
-        if len(values) != 5:
+        if len(values) != 6:
             raise RuntimeError(
-                f"Expected 5 public inputs, found {len(values)} in {prover_toml}"
+                f"Expected 6 public inputs, found {len(values)} in {prover_toml}"
             )
         return b"".join(values[n].to_bytes(32, "big") for n in field_names)
 

@@ -1,4 +1,5 @@
 use crate::blake3_field::hash_response_to_field;
+use num_bigint::BigUint;
 use crate::normalize::normalize_scores;
 use crate::types::{EvaluationData, WitnessData, NUM_MINERS};
 
@@ -23,6 +24,7 @@ pub fn generate_witness(data: &EvaluationData) -> WitnessData {
     WitnessData {
         input_commitment: "0".to_string(),
         weight_commitment: "0".to_string(),
+        score_commitment: "0".to_string(),
         epoch: data.epoch.to_string(),
         validator_id: data.validator_id.to_string(),
         challenge_nonce: data.challenge_nonce.to_string(),
@@ -57,6 +59,7 @@ pub fn to_prover_toml(w: &WitnessData) -> String {
 
     lines.push(format!("input_commitment = \"{}\"", w.input_commitment));
     lines.push(format!("weight_commitment = \"{}\"", w.weight_commitment));
+    lines.push(format!("score_commitment = \"{}\"", w.score_commitment));
     lines.push(format!("epoch = \"{}\"", w.epoch));
     lines.push(format!("validator_id = \"{}\"", w.validator_id));
     lines.push(format!("challenge_nonce = \"{}\"", w.challenge_nonce));
@@ -75,6 +78,29 @@ fn format_array(items: &[String]) -> String {
         .map(|s| format!("\"{}\"", s))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Validate a commitment string from nargo output.
+fn validate_commitment(s: &str, name: &str) -> Result<(), String> {
+    if !s.starts_with("0x") {
+        return Err(format!("{name} missing 0x prefix: {s}"));
+    }
+    if s.len() != 66 {
+        return Err(format!("{name} wrong length: {} (expected 66)", s.len()));
+    }
+    if !s[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("{name} contains non-hex chars"));
+    }
+    // Check value < BN254 modulus
+    let val = BigUint::parse_bytes(s[2..].as_bytes(), 16)
+        .ok_or_else(|| format!("{name} hex parse failed"))?;
+    let modulus = BigUint::parse_bytes(
+        b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001", 16
+    ).unwrap();
+    if val >= modulus {
+        return Err(format!("{name} exceeds BN254 modulus"));
+    }
+    Ok(())
 }
 
 /// Compute commitments by shelling out to nargo execute on the commitment helper.
@@ -104,7 +130,7 @@ pub fn compute_commitments(
     }
 
     // Parse commitment values from stdout
-    // Format: "input_commitment=0x..." and "weight_commitment=0x..."
+    // Format: "input_commitment=0x...", "weight_commitment=0x...", "score_commitment=0x..."
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
         let line = line.trim();
@@ -112,15 +138,14 @@ pub fn compute_commitments(
             witness.input_commitment = val.to_string();
         } else if let Some(val) = line.strip_prefix("weight_commitment=") {
             witness.weight_commitment = val.to_string();
+        } else if let Some(val) = line.strip_prefix("score_commitment=") {
+            witness.score_commitment = val.to_string();
         }
     }
 
-    if witness.input_commitment == "0" || witness.weight_commitment == "0" {
-        return Err(format!(
-            "Failed to extract commitments. nargo stdout:\n{}",
-            stdout
-        ));
-    }
+    validate_commitment(&witness.input_commitment, "input_commitment")?;
+    validate_commitment(&witness.weight_commitment, "weight_commitment")?;
+    validate_commitment(&witness.score_commitment, "score_commitment")?;
 
     // Clean up Prover.toml
     let _ = std::fs::remove_file(&prover_path);

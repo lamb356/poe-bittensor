@@ -35,6 +35,7 @@ class ProofSubmission(_BaseSynapse):
     proof_b64: typing.Optional[str] = None       # base64-encoded proof bytes
     public_inputs_json: typing.Optional[str] = None
     proof_timestamp: typing.Optional[float] = None
+    zkverify_job_id: typing.Optional[str] = None
 
     def deserialize(self) -> typing.Optional[dict]:
         if self.proof_b64 is None:

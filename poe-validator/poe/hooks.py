@@ -21,7 +21,9 @@ class PoEHooks:
     def on_pre_set_weights(self, epoch: int) -> PoEProof:
         """Call before set_weights() to generate and store the proof."""
         nonce = get_challenge_nonce(epoch)
-        proof = self.prover.prove(epoch, nonce)
-        self.storage.publish(proof, epoch)
-        self.prover.reset()
-        return proof
+        try:
+            proof = self.prover.prove(epoch, nonce)
+            self.storage.publish(proof, epoch)
+            return proof
+        finally:
+            self.prover.reset()
