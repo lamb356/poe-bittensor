@@ -13,7 +13,7 @@ from poe_subnet.reward import get_rewards
 from poe_subnet.utils.uids import get_random_uids
 
 
-async def forward(validator) -> None:
+async def forward(validator, telemetry=None) -> None:
     """Query miners for PoE proofs and score them.
 
     Called each step by the validator's main loop.
@@ -60,10 +60,28 @@ async def forward(validator) -> None:
     # Verify each proof
     proof_results = []
     for uid, response in zip(miner_uids, responses):
+        verify_start = time.time()
         result = _verify_response(validator, response, config)
+        verify_elapsed_ms = (time.time() - verify_start) * 1000
         proof_results.append(result)
         status = "valid" if result["proof_valid"] else "invalid/missing"
         bt.logging.debug(f"  UID {uid}: {status}")
+
+        if telemetry:
+            # Get proof size from response
+            proof_size = 0
+            if response.proof_b64:
+                try:
+                    proof_size = len(response.decode_and_validate_proof() or b"")
+                except Exception:
+                    pass
+            telemetry.log(
+                tempo=epoch,
+                uid=int(uid),
+                has_valid_proof=result["proof_valid"],
+                verify_time_ms=round(verify_elapsed_ms, 1),
+                proof_size_bytes=proof_size,
+            )
 
     # Score miners
     rewards = get_rewards(proof_results, epoch_end_time, config)

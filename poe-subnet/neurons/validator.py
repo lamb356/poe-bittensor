@@ -30,6 +30,7 @@ def get_config() -> bt.Config:
     parser.add_argument("--netuid", type=int, default=1)
     parser.add_argument("--poe_root", type=str, default=os.path.expanduser("~/poe-bittensor"))
     parser.add_argument("--sample_size", type=int, default=16)
+    parser.add_argument("--log_dir", type=str, default="testnet/logs")
     bt.Subtensor.add_args(parser)
     bt.Wallet.add_args(parser)
     bt.logging.add_args(parser)
@@ -71,6 +72,12 @@ class Validator:
         self.dendrite = bt.Dendrite(wallet=self.wallet)
 
         self._last_weights_block = 0
+
+        # Telemetry for campaign monitoring
+        from poe_subnet.telemetry import TelemetryLogger
+        wallet_name = self.config.wallet.name if hasattr(self.config.wallet, 'name') else "unknown"
+        log_dir = getattr(self.config, 'log_dir', 'testnet/logs')
+        self.telemetry = TelemetryLogger(log_dir, f"validator_{wallet_name}")
 
         self.load_state()
         bt.logging.info(f"Validator initialized with UID {self.uid}")
@@ -147,7 +154,7 @@ class Validator:
         try:
             while True:
                 try:
-                    loop.run_until_complete(forward(self))
+                    loop.run_until_complete(forward(self, telemetry=self.telemetry))
                 except Exception as e:
                     bt.logging.error(f"Forward pass failed: {e}")
 

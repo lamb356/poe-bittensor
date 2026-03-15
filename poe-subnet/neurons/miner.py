@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import time
 import typing
 
@@ -30,14 +31,12 @@ def get_config() -> bt.Config:
     parser = argparse.ArgumentParser()
     parser.add_argument("--netuid", type=int, default=1)
     parser.add_argument("--poe_root", type=str, default=os.path.expanduser("~/poe-bittensor"))
+    parser.add_argument("--log_dir", type=str, default="testnet/logs")
     bt.Subtensor.add_args(parser)
     bt.Wallet.add_args(parser)
     bt.Axon.add_args(parser)
     bt.logging.add_args(parser)
     return bt.Config(parser)
-
-
-import os
 
 
 class Miner:
@@ -81,6 +80,12 @@ class Miner:
         # Optional zkVerify submitter (configured externally)
         self.zkverify_submitter = None
 
+        # Telemetry for campaign monitoring
+        from poe_subnet.telemetry import TelemetryLogger
+        wallet_name = self.config.wallet.name if hasattr(self.config.wallet, 'name') else "unknown"
+        log_dir = getattr(self.config, 'log_dir', 'testnet/logs')
+        self.telemetry = TelemetryLogger(log_dir, f"honest_{wallet_name}")
+
         bt.logging.info(f"Miner initialized with UID {self.uid}")
 
     def _get_uid(self) -> int:
@@ -112,6 +117,7 @@ class Miner:
 
         async with self._prove_lock:
             try:
+                prove_start = time.time()
                 proof = self.prover.prove(epoch, synapse.challenge_nonce)
                 synapse.proof_b64 = ProofSubmission.encode_proof(proof.proof_bytes)
                 synapse.public_inputs_json = json.dumps(proof.public_inputs)
@@ -140,8 +146,27 @@ class Miner:
 
                 self.prover.reset()
                 bt.logging.info(f"Proof generated: {len(proof.proof_bytes)} bytes")
+
+                prove_elapsed_ms = (time.time() - prove_start) * 1000
+                self.telemetry.log(
+                    tempo=epoch,
+                    wallet=self.config.wallet.name if hasattr(self.config.wallet, 'name') else "unknown",
+                    uid=self.uid,
+                    has_valid_proof=True,
+                    proof_gen_time_ms=round(prove_elapsed_ms, 1),
+                    proof_size_bytes=len(proof.proof_bytes),
+                    strategy="honest",
+                )
             except Exception as e:
                 bt.logging.error(f"Proof generation failed: {e}")
+                self.telemetry.log(
+                    tempo=epoch,
+                    wallet=self.config.wallet.name if hasattr(self.config.wallet, 'name') else "unknown",
+                    uid=self.uid,
+                    has_valid_proof=False,
+                    strategy="honest",
+                    error=str(e),
+                )
 
         return synapse
 

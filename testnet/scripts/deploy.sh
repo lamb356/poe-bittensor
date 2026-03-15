@@ -34,11 +34,22 @@ preflight() {
     done
 
     echo ""
+    echo "=== Preflight: Creating copier wallets ==="
+    for name in poe-copier-naive poe-copier-delayed poe-copier-partial; do
+        if btcli wallet overview --wallet-name "$name" --no-prompt 2>/dev/null | grep -q '5[A-Za-z0-9]'; then
+            echo "  Wallet exists: $name"
+        else
+            echo "  Creating wallet: $name"
+            btcli wallet create --wallet-name "$name" --wallet-hotkey default --no-password
+        fi
+    done
+
+    echo ""
     echo "=== Preflight: Fund wallets ==="
     if [ "$NETWORK" != "--network ws://127.0.0.1:9944" ]; then
         echo "  Visit https://faucet.opentensor.dev/ to get test TAO"
         echo "  Fund these coldkey addresses:"
-        for name in poe-owner poe-miner poe-validator-1 poe-validator-2 poe-validator-3; do
+        for name in poe-owner poe-miner poe-validator-1 poe-validator-2 poe-validator-3 poe-copier-naive poe-copier-delayed poe-copier-partial; do
             addr=$(btcli wallet overview --wallet-name "$name" --no-prompt 2>/dev/null | grep -oP '5[A-Za-z0-9]{47}' | head -1)
             echo "    $name: ${addr:-UNKNOWN}"
         done
@@ -52,18 +63,35 @@ deploy() {
     echo "=== Deploy: Create subnet ==="
     btcli subnet create --wallet-name poe-owner $NETWORK --no-prompt
 
-    # Resolve the actual netuid from the created subnet
+    # Auto-detect assigned netuid
     if [ -z "${NETUID:-}" ]; then
-        echo "  ERROR: NETUID not set. After creating the subnet, find it with:"
-        echo "    btcli subnet list $NETWORK"
-        echo "  Then re-run with: NETUID=<n> bash $0 $@"
-        exit 1
+        echo "  Detecting assigned netuid..."
+        NETUID=$(btcli subnet list $NETWORK --no-prompt 2>/dev/null | grep "poe-owner" | awk '{print $1}' | head -1)
+        if [ -z "$NETUID" ]; then
+            echo "  ERROR: Could not auto-detect netuid. Find it with:"
+            echo "    btcli subnet list $NETWORK"
+            echo "  Then re-run with: NETUID=<n> bash $0 $@"
+            exit 1
+        fi
+        echo "  Detected netuid: $NETUID"
     fi
     echo "  Using netuid: $NETUID"
+
+    echo "$NETUID" > "$POE_ROOT/testnet/.netuid"
+    echo "  Netuid saved to testnet/.netuid"
 
     echo ""
     echo "=== Deploy: Register neurons ==="
     for name in poe-miner poe-validator-1 poe-validator-2 poe-validator-3; do
+        echo "  Registering: $name"
+        btcli subnet register --netuid "$NETUID" --wallet-name "$name" --wallet-hotkey default \
+            $NETWORK --no-prompt
+        echo "  Registered: $name"
+    done
+
+    echo ""
+    echo "=== Deploy: Register copier agents ==="
+    for name in poe-copier-naive poe-copier-delayed poe-copier-partial; do
         echo "  Registering: $name"
         btcli subnet register --netuid "$NETUID" --wallet-name "$name" --wallet-hotkey default \
             $NETWORK --no-prompt

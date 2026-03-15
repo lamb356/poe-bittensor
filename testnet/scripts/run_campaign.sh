@@ -1,20 +1,33 @@
 #!/bin/bash
 # Orchestrate full PoE testnet campaign.
 #
-# Starts 3 copier agents, verifies honest validators are running,
-# runs N tempos, collects monitoring data, produces final report.
+# Launches 1 validator, 3 honest miners, 3 copier agents (all real neurons),
+# runs live monitor, and produces final report.
 #
 # Usage:
-#   bash testnet/scripts/run_campaign.sh [--tempos 100] [--network test]
+#   bash testnet/scripts/run_campaign.sh
+#   NETUID=42 bash testnet/scripts/run_campaign.sh
 
 set -euo pipefail
 
-TEMPOS="${TEMPOS:-100}"
-NETWORK="${NETWORK:---network test}"
-NETUID="${NETUID:?ERROR: NETUID must be set. Find it with: btcli subnet list}"
 POE_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LOG_DIR="$POE_ROOT/testnet/logs"
 PID_FILE="$POE_ROOT/testnet/.pids"
+TEMPOS="${TEMPOS:-100}"
+
+# Read NETUID
+if [ -n "${NETUID:-}" ]; then
+    echo "Using NETUID=$NETUID from environment"
+elif [ -f "$POE_ROOT/testnet/.netuid" ]; then
+    NETUID=$(cat "$POE_ROOT/testnet/.netuid")
+    echo "Using NETUID=$NETUID from testnet/.netuid"
+else
+    echo "ERROR: NETUID not set and testnet/.netuid not found."
+    echo "Run deploy.sh first, or set NETUID=<n>"
+    exit 1
+fi
+
+NETWORK="${NETWORK:---network test}"
 
 mkdir -p "$LOG_DIR"
 > "$PID_FILE"
@@ -31,60 +44,53 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== PoE Testnet Campaign ==="
-echo "Tempos: $TEMPOS"
-echo "Network: $NETWORK"
 echo "Netuid: $NETUID"
+echo "Network: $NETWORK"
 echo "Logs: $LOG_DIR"
 echo ""
 
-# Start copier agents (background)
-echo "=== Starting copier agents ==="
-
-python "$POE_ROOT/testnet/scripts/copier_agents.py" \
-    --strategy naive --wallet-name copier-naive \
-    --num-tempos "$TEMPOS" --log-dir "$LOG_DIR" &
+# Start PoE validator
+echo "=== Starting PoE validator ==="
+python "$POE_ROOT/poe-subnet/neurons/validator.py" \
+    --netuid "$NETUID" --subtensor.network test \
+    --wallet.name poe-verifier-1 --wallet.hotkey default \
+    --poe_root "$POE_ROOT" --log_dir "$LOG_DIR" &
 echo $! >> "$PID_FILE"
-echo "  naive copier: PID $!"
+echo "  validator: PID $!"
 
-python "$POE_ROOT/testnet/scripts/copier_agents.py" \
-    --strategy delayed --wallet-name copier-delayed \
-    --noise-std 0.02 --num-tempos "$TEMPOS" --log-dir "$LOG_DIR" &
-echo $! >> "$PID_FILE"
-echo "  delayed copier: PID $!"
-
-python "$POE_ROOT/testnet/scripts/copier_agents.py" \
-    --strategy partial --wallet-name copier-partial \
-    --honest-fraction 0.1 --num-tempos "$TEMPOS" --log-dir "$LOG_DIR" &
-echo $! >> "$PID_FILE"
-echo "  partial copier: PID $!"
-
+# Start honest miners
 echo ""
-echo "=== Verifying honest validators are running ==="
-# Check that honest validator neurons are running externally
-# They must be started separately (they run the actual Bittensor validator loop)
-HONEST_RUNNING=true
-for name in poe-validator-1 poe-validator-2 poe-validator-3; do
-    if ! pgrep -f "wallet.name $name" >/dev/null 2>&1; then
-        echo "  WARNING: Honest validator '$name' not detected"
-        HONEST_RUNNING=false
-    else
-        echo "  OK: $name is running"
-    fi
+echo "=== Starting honest miners ==="
+PORT=8091
+for name in poe-honest-1 poe-honest-2 poe-honest-3; do
+    python "$POE_ROOT/poe-subnet/neurons/miner.py" \
+        --netuid "$NETUID" --subtensor.network test \
+        --wallet.name "$name" --wallet.hotkey default \
+        --poe_root "$POE_ROOT" --log_dir "$LOG_DIR" \
+        --axon.port "$PORT" &
+    echo $! >> "$PID_FILE"
+    echo "  $name: PID $! (port $PORT)"
+    PORT=$((PORT + 1))
 done
 
-if [ "$HONEST_RUNNING" = false ]; then
-    echo ""
-    echo "ERROR: Honest validators must be running before starting campaign."
-    echo "Start them with:"
-    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-1"
-    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-2"
-    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-3"
-    exit 1
-fi
+# Start copier agents
+echo ""
+echo "=== Starting copier agents ==="
+for strategy in naive delayed partial; do
+    python "$POE_ROOT/poe-subnet/neurons/copier.py" \
+        --strategy "$strategy" \
+        --netuid "$NETUID" --subtensor.network test \
+        --wallet.name "poe-copier-$strategy" --wallet.hotkey default \
+        --poe_root "$POE_ROOT" --log_dir "$LOG_DIR" \
+        --axon.port "$PORT" &
+    echo $! >> "$PID_FILE"
+    echo "  copier-$strategy: PID $! (port $PORT)"
+    PORT=$((PORT + 1))
+done
 
 echo ""
-echo "=== Waiting for campaign to complete ==="
-echo "(Press Ctrl+C to stop early)"
+echo "=== All agents started. Waiting for campaign... ==="
+echo "(Press Ctrl+C to stop)"
 
 # Wait for all background jobs
 wait
@@ -92,9 +98,6 @@ wait
 echo ""
 echo "=== Campaign complete. Generating report ==="
 python "$POE_ROOT/testnet/scripts/monitor.py" --log-dir "$LOG_DIR"
-
-# Save JSON report
 python "$POE_ROOT/testnet/scripts/monitor.py" --log-dir "$LOG_DIR" --json \
     > "$LOG_DIR/campaign_report.json"
-echo ""
-echo "JSON report saved to: $LOG_DIR/campaign_report.json"
+echo "JSON report: $LOG_DIR/campaign_report.json"

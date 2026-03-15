@@ -52,13 +52,16 @@ class CampaignMetrics:
     tempo_count: int = 0
     copier_by_strategy: dict[str, dict] = field(default_factory=lambda: {})
 
-    def add_honest(self, passed: bool, gen_time_ms: float, size: int, verify_ms: float):
+    def add_honest(self, passed: bool, gen_time_ms=None, size=None, verify_ms=None):
         self.honest_total += 1
         if passed:
             self.honest_passed += 1
-        self.proof_gen_times.append(gen_time_ms)
-        self.proof_sizes.append(size)
-        self.verify_times.append(verify_ms)
+        if gen_time_ms is not None:
+            self.proof_gen_times.append(gen_time_ms)
+        if size is not None:
+            self.proof_sizes.append(size)
+        if verify_ms is not None:
+            self.verify_times.append(verify_ms)
 
     def add_copier(self, detected: bool):
         self.copier_total += 1
@@ -203,19 +206,30 @@ def read_logs(log_dir: str) -> CampaignMetrics:
                 except json.JSONDecodeError:
                     continue
 
-                if is_copier:
-                    # Copier: detected if has_valid_proof is False
+                # Determine if entry is from copier or honest based on content
+                entry_strategy = entry.get("strategy", "")
+
+                if is_copier or entry_strategy in ("naive", "delayed", "partial"):
+                    effective_strategy = entry_strategy or strategy  # prefer entry field
                     detected = not entry.get("has_valid_proof", False)
                     metrics.add_copier(detected)
-                    metrics.add_copier_by_strategy(strategy, detected)
-                elif is_honest or entry.get("has_valid_proof"):
-                    gen_time = entry.get("proof_gen_time_ms", entry.get("elapsed_seconds", 0) * 1000)
-                    size = entry.get("proof_size_bytes", 14244)
-                    verify = entry.get("verify_time_ms", 45)
+                    metrics.add_copier_by_strategy(effective_strategy, detected)
+                elif is_honest or entry_strategy == "honest" or entry.get("has_valid_proof"):
+                    gen_time = entry.get("proof_gen_time_ms")
+                    if gen_time is None:
+                        elapsed = entry.get("elapsed_seconds")
+                        gen_time = elapsed * 1000 if elapsed else None
+                    size = entry.get("proof_size_bytes")
+                    verify = entry.get("verify_time_ms")
                     passed = entry.get("has_valid_proof", True)
                     metrics.add_honest(passed, gen_time, size, verify)
 
                 metrics.tempo_count = max(metrics.tempo_count, entry.get("tempo", 0) + 1)
+
+    if metrics.honest_total == 0:
+        print("WARNING: No honest validator/miner data found in logs", file=sys.stderr)
+    if metrics.copier_total == 0:
+        print("WARNING: No copier data found in logs", file=sys.stderr)
 
     return metrics
 
