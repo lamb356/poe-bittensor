@@ -30,10 +30,10 @@ def test_add_evaluation_multiple(prover):
     assert prover.evaluation_count == 10
 
 
-def test_add_evaluation_replaces(prover):
+def test_add_evaluation_duplicate_raises(prover):
     prover.add_evaluation(5, b"first", 100)
-    prover.add_evaluation(5, b"second", 200)
-    assert prover.evaluation_count == 1
+    with pytest.raises(ValueError, match="Duplicate UID 5"):
+        prover.add_evaluation(5, b"second", 200)
 
 
 def test_add_evaluation_invalid_uid(prover):

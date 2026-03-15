@@ -5,12 +5,12 @@ mod eval_modules;
 
 use types::NUM_MINERS;
 use commitment::{compute_input_commitment, compute_weight_commitment};
-use normalization::{verify_weight_proportionality, verify_weight_sum, compute_weights};
+use normalization::{verify_weight_proportionality, compute_weights};
 use eval_modules::interface::{EvalFunction, MAX_PARAMS};
 
 // ============================================================
 // Lite PoE Circuit -- Proof-of-Evaluation for Bittensor
-// 64 miners, 5 constraints
+// 64 miners, 4 constraints
 // ============================================================
 
 fn main(
@@ -33,17 +33,14 @@ fn main(
     );
     assert(computed_ic == input_commitment, "Input commitment mismatch");
 
-    // CONSTRAINT 2: Score-to-weight proportionality
+    // CONSTRAINT 2: Score-to-weight proportionality + weight sum range check
     verify_weight_proportionality(scores, weights);
 
-    // CONSTRAINT 3: Weight sum range check
-    verify_weight_sum(weights);
-
-    // CONSTRAINT 4: Weight commitment binding
+    // CONSTRAINT 3: Weight commitment binding
     let computed_wc = compute_weight_commitment(weights, validator_id, epoch);
     assert(computed_wc == weight_commitment, "Weight commitment mismatch");
 
-    // CONSTRAINT 5: Validator identity binding
+    // CONSTRAINT 4: Validator identity binding
     // Enforced structurally: validator_id is pub + hashed into weight_commitment
 }
 
@@ -92,7 +89,7 @@ fn test_honest_validator() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -112,7 +109,7 @@ fn test_wrong_weights_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let mut weights = compute_weights(scores);
+    let mut weights = unsafe { compute_weights(scores) };
 
     weights[0] = weights[0] + 1000;
 
@@ -134,7 +131,7 @@ fn test_wrong_responses_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -156,7 +153,7 @@ fn test_replay_different_epoch_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -177,7 +174,7 @@ fn test_wrong_challenge_nonce_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -219,13 +216,10 @@ pub fn full_poe_verify<E>(
         scores[i] = E::evaluate(response_hashes[i], eval_params);
     }
 
-    // CONSTRAINT 3: Score-to-weight proportionality
+    // CONSTRAINT 3: Score-to-weight proportionality + weight sum range check
     verify_weight_proportionality(scores, weights);
 
-    // CONSTRAINT 4: Weight sum range check
-    verify_weight_sum(weights);
-
-    // CONSTRAINT 5: Weight commitment binding
+    // CONSTRAINT 4: Weight commitment binding
     let computed_wc = compute_weight_commitment(weights, validator_id, epoch);
     assert(computed_wc == weight_commitment, "Weight commitment mismatch");
 }
@@ -262,7 +256,7 @@ fn test_full_poe_arithmetic() {
 
     // Compute expected scores and weights
     let scores = compute_arithmetic_scores(hashes, eval_params);
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -284,7 +278,7 @@ fn test_full_poe_wrong_weights_rejected() {
 
     let eval_params: [Field; MAX_PARAMS] = [1, 50, 0, 0];
     let scores = compute_arithmetic_scores(hashes, eval_params);
-    let mut weights = compute_weights(scores);
+    let mut weights = unsafe { compute_weights(scores) };
 
     // Tamper with weights
     weights[0] = weights[0] + 500;
@@ -310,7 +304,7 @@ fn run_with_scores(scores: [Field; NUM_MINERS]) {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
     let wc = compute_weight_commitment(weights, vid, epoch);
@@ -473,7 +467,7 @@ fn test_adversarial_swapped_scores() {
     let nonce = test_challenge_nonce();
 
     // Compute correct weights from original scores
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     // Swap scores[0] and scores[1] -- weights no longer match
     let tmp = scores[0];
@@ -498,7 +492,7 @@ fn test_adversarial_score_redistribution() {
     let nonce = test_challenge_nonce();
 
     // Compute correct weights
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     // Redistribute: +100 to miner 0, -100 from miner 1
     // Total stays the same, but individual weights should differ
@@ -521,7 +515,7 @@ fn test_adversarial_different_miner_uids() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     // Compute commitments with original UIDs
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -553,7 +547,7 @@ fn test_salt_reuse_different_epochs() {
 #[test]
 fn test_different_validator_different_commitment() {
     let scores = test_scores();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
     let epoch = test_epoch();
 
     let wc_v1 = compute_weight_commitment(weights, 12345, epoch);
@@ -571,7 +565,7 @@ fn test_adversarial_wrong_validator_id() {
     let salt = test_salt();
     let epoch = test_epoch();
     let nonce = test_challenge_nonce();
-    let weights = compute_weights(scores);
+    let weights = unsafe { compute_weights(scores) };
 
     // Commitments bound to validator 12345
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -618,7 +612,7 @@ fn test_fuzz_valid_scores() {
     // Test 20 different score vectors
     for seed_idx in 1..21 {
         let scores = pseudo_random_scores(seed_idx as Field);
-        let weights = compute_weights(scores);
+        let weights = unsafe { compute_weights(scores) };
 
         let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
         let wc = compute_weight_commitment(weights, vid, epoch);
@@ -639,7 +633,7 @@ fn test_fuzz_tampered_weights_rejected() {
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
 
-    let mut weights = compute_weights(scores);
+    let mut weights = unsafe { compute_weights(scores) };
 
     // Tamper: redistribute weight from miner 0 to miner 1
     weights[0] = weights[0] + 1;
@@ -662,7 +656,7 @@ fn test_fuzz_single_weight_off_by_one() {
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
 
-    let mut weights = compute_weights(scores);
+    let mut weights = unsafe { compute_weights(scores) };
 
     // Off by just 1 -- should still be caught
     weights[32] = weights[32] + 1;

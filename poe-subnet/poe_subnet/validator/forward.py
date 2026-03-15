@@ -6,6 +6,7 @@ import time
 import bittensor as bt
 import numpy as np
 
+from poe.challenge import get_challenge_nonce
 from poe_subnet.config import PoESubnetConfig
 from poe_subnet.protocol import ProofSubmission
 from poe_subnet.reward import get_rewards
@@ -25,7 +26,7 @@ async def forward(validator) -> None:
     epoch_end_time = time.time()
 
     # Challenge nonce for this epoch
-    challenge_nonce = hash(f"poe-challenge-{epoch}") % (2**63)
+    challenge_nonce = get_challenge_nonce(epoch)
 
     # Select miners to query
     miner_uids = get_random_uids(
@@ -88,7 +89,7 @@ def _verify_response(
         bt.logging.debug(
             f"Proof too small: {len(proof_data)} bytes"
         )
-        return {"proof_valid": False, "proof_timestamp": response.proof_timestamp}
+        return {"proof_valid": False, "proof_timestamp": time.time()}
 
     try:
         is_valid = validator.verifier.verify(proof_data)
@@ -98,5 +99,5 @@ def _verify_response(
 
     return {
         "proof_valid": is_valid,
-        "proof_timestamp": response.proof_timestamp,
+        "proof_timestamp": time.time(),
     }

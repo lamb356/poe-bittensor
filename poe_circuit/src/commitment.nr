@@ -41,6 +41,10 @@ pub fn compute_input_commitment(
     epoch: Field,
     salt: Field,
 ) -> Field {
+    // H-01: Range check UIDs before packing to prevent overflow into adjacent slots
+    for i in 0..NUM_MINERS {
+        miner_uids[i].assert_max_bit_size::<16>();
+    }
     let packed_uids = pack_uids(miner_uids);
     // Preimage: 5 packed UIDs + 64 hashes + 3 scalars = 72 elements
     let preimage_len: u32 = 5 + NUM_MINERS + 3;
@@ -62,6 +66,10 @@ pub fn compute_weight_commitment(
     validator_id: Field,
     epoch: Field,
 ) -> Field {
+    // H-01: Range check weights before packing to prevent overflow into adjacent slots
+    for i in 0..NUM_MINERS {
+        weights[i].assert_max_bit_size::<16>();
+    }
     // Pack weights (u16) same as UIDs: 15 per Field element
     let packed_weights = pack_uids(weights); // same packing function works
     // Preimage: 5 packed weights + validator_id + epoch = 7 elements

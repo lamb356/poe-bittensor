@@ -39,6 +39,10 @@ class ProofSubmission(_BaseSynapse):
     def deserialize(self) -> typing.Optional[dict]:
         if self.proof_b64 is None:
             return None
+        if len(self.proof_b64) > 25000:
+            raise ValueError(
+                f"proof_b64 too large: {len(self.proof_b64)} chars (max 25000)"
+            )
         return {
             "proof_bytes": base64.b64decode(self.proof_b64),
             "public_inputs_json": self.public_inputs_json,

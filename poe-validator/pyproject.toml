@@ -9,6 +9,7 @@ description = "Proof of Evaluation - Bittensor validator integration"
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.24.0",
+    "blake3>=0.3.0",
 ]
 
 [project.optional-dependencies]

@@ -39,6 +39,10 @@ fn main(
     validator_id: Field,
     salt: Field,
 ) {
+    // H-01: Range check UIDs before packing
+    for i in 0..NUM_MINERS {
+        miner_uids[i].assert_max_bit_size::<16>();
+    }
     // Pack UIDs (u16) into 5 Field elements
     let packed_uids = pack_u16s(miner_uids);
 
@@ -56,6 +60,10 @@ fn main(
     input_preimage[5 + NUM_MINERS + 2] = salt;
     let ic = Poseidon2::hash(input_preimage, 72);
 
+    // H-01: Range check weights before packing
+    for i in 0..NUM_MINERS {
+        weights[i].assert_max_bit_size::<16>();
+    }
     // Pack weights (u16) into 5 Field elements
     let packed_weights = pack_u16s(weights);
 

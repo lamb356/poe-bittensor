@@ -1,7 +1,7 @@
 """Bittensor validator lifecycle integration."""
 from __future__ import annotations
 
-from poe.challenge import get_drand_nonce
+from poe.challenge import get_challenge_nonce
 from poe.config import PoEConfig
 from poe.prover import PoEProver, PoEProof
 from poe.storage import Storage
@@ -20,7 +20,7 @@ class PoEHooks:
 
     def on_pre_set_weights(self, epoch: int) -> PoEProof:
         """Call before set_weights() to generate and store the proof."""
-        nonce = get_drand_nonce(epoch)
+        nonce = get_challenge_nonce(epoch)
         proof = self.prover.prove(epoch, nonce)
         self.storage.publish(proof, epoch)
         self.prover.reset()

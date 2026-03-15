@@ -2,6 +2,21 @@ use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 use crate::eval_modules::field_math::{fixed_mul, fixed_div, sn8_time_weight};
 
 // ============================================================
+// KNOWN LIMITATION (H-03, audit ref: 2026-03-14)
+//
+// Unsigned Field cannot represent negative PnL values.
+// Drawdown detection via compute_max_drawdown() only works for
+// non-negative PnL series. With unsigned arithmetic, negative
+// daily PnL wraps to large Field values, making drawdown
+// comparisons meaningless.
+//
+// Impact: Miners with negative PnL may not be penalized.
+// Fix: Signed fixed-point arithmetic (out of scope for this patch).
+// Tracking: SN8 currently weights PnL at 0 in production,
+// so this does not affect live scoring.
+// ============================================================
+
+// ============================================================
 // SN8 (Taoshi PTN) PnL Evaluation Module
 //
 // Proves: given committed PnL checkpoints and time weights,

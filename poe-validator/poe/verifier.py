@@ -32,7 +32,7 @@ class PoEVerifier:
             "-b", circuit_json,
             "-o", vk_dir,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             raise RuntimeError(
                 f"bb write_vk failed (exit {result.returncode}):\n"
@@ -56,5 +56,5 @@ class PoEVerifier:
                 "-p", proof_path,
                 "-k", vk_path,
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             return result.returncode == 0

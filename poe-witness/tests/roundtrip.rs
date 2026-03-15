@@ -2,10 +2,29 @@ use poe_witness::types::{EvaluationData, NUM_MINERS};
 use poe_witness::witness::{generate_witness, to_prover_toml, compute_commitments};
 use std::process::Command;
 
-const NARGO: &str = "/home/burba/.nargo/bin/nargo";
-const BB: &str = "/home/burba/.bb/bb";
-const COMMITMENT_HELPER: &str = "/home/burba/poe-bittensor/commitment_helper";
-const POE_CIRCUIT: &str = "/home/burba/poe-bittensor/poe_circuit";
+fn nargo_bin() -> String {
+    std::env::var("NARGO_BIN").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/burba".into());
+        format!("{home}/.nargo/bin/nargo")
+    })
+}
+
+fn bb_bin() -> String {
+    std::env::var("BB_BIN").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/burba".into());
+        format!("{home}/.bb/bb")
+    })
+}
+
+fn commitment_helper_dir() -> String {
+    std::env::var("COMMITMENT_HELPER_DIR")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../commitment_helper").into())
+}
+
+fn poe_circuit_dir() -> String {
+    std::env::var("POE_CIRCUIT_DIR")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../poe_circuit").into())
+}
 
 fn test_evaluation_data() -> EvaluationData {
     let miner_uids: Vec<u16> = (1..=NUM_MINERS as u16).collect();
@@ -48,7 +67,7 @@ fn test_commitment_computation() {
     let mut witness = generate_witness(&data);
 
     // Compute commitments via Noir helper
-    compute_commitments(&mut witness, COMMITMENT_HELPER, NARGO)
+    compute_commitments(&mut witness, &commitment_helper_dir(), &nargo_bin())
         .expect("Commitment computation failed");
 
     assert_ne!(witness.input_commitment, "0", "Input commitment not computed");
@@ -69,17 +88,19 @@ fn test_full_roundtrip_prove_verify() {
     let mut witness = generate_witness(&data);
 
     // Step 1: Compute commitments
-    compute_commitments(&mut witness, COMMITMENT_HELPER, NARGO)
+    compute_commitments(&mut witness, &commitment_helper_dir(), &nargo_bin())
         .expect("Commitment computation failed");
 
     // Step 2: Write Prover.toml to poe_circuit
     let prover_toml = to_prover_toml(&witness);
-    let prover_path = format!("{}/Prover.toml", POE_CIRCUIT);
+    let poe_circuit = poe_circuit_dir();
+    let prover_path = format!("{}/Prover.toml", poe_circuit);
     std::fs::write(&prover_path, &prover_toml).expect("Failed to write Prover.toml");
 
     // Step 3: nargo execute (generate witness)
-    let output = Command::new(NARGO)
-        .args(["execute", "--program-dir", POE_CIRCUIT])
+    let nargo = nargo_bin();
+    let output = Command::new(&nargo)
+        .args(["execute", "--program-dir", &poe_circuit])
         .output()
         .expect("Failed to run nargo execute");
     assert!(
@@ -89,12 +110,13 @@ fn test_full_roundtrip_prove_verify() {
     );
 
     // Step 4: bb prove
-    let circuit_json = format!("{}/target/poe_circuit.json", POE_CIRCUIT);
-    let witness_gz = format!("{}/target/poe_circuit.gz", POE_CIRCUIT);
+    let circuit_json = format!("{}/target/poe_circuit.json", poe_circuit);
+    let witness_gz = format!("{}/target/poe_circuit.gz", poe_circuit);
     let proof_dir = "/tmp/poe_proof";
     let proof_path = "/tmp/poe_proof/proof";
     std::fs::create_dir_all(proof_dir).ok();
-    let output = Command::new(BB)
+    let bb = bb_bin();
+    let output = Command::new(&bb)
         .args([
             "prove",
             "--scheme", "ultra_honk",
@@ -114,7 +136,7 @@ fn test_full_roundtrip_prove_verify() {
     let vk_dir = "/tmp/poe_vk";
     let vk_path = "/tmp/poe_vk/vk";
     std::fs::create_dir_all(vk_dir).ok();
-    let output = Command::new(BB)
+    let output = Command::new(&bb)
         .args([
             "write_vk",
             "--scheme", "ultra_honk",
@@ -129,7 +151,7 @@ fn test_full_roundtrip_prove_verify() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let output = Command::new(BB)
+    let output = Command::new(&bb)
         .args([
             "verify",
             "--scheme", "ultra_honk",

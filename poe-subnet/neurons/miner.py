@@ -116,6 +116,11 @@ class Miner:
                 "proof_timestamp": synapse.proof_timestamp,
             }
 
+            # M-13: LRU eviction — keep at most 3 epochs
+            if len(self._proof_cache) > 3:
+                oldest = min(self._proof_cache.keys())
+                del self._proof_cache[oldest]
+
             self.prover.reset()
             bt.logging.info(f"Proof generated: {len(proof.proof_bytes)} bytes")
         except Exception as e:

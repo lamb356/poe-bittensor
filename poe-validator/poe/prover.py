@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-import random
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -37,6 +37,8 @@ class PoEProver:
             raise ValueError(f"uid must be u16, got {uid}")
         if not isinstance(score, int) or score < 0:
             raise ValueError(f"score must be non-negative int, got {score}")
+        if uid in self._evaluations:
+            raise ValueError(f"Duplicate UID {uid} in current epoch")
         self._evaluations[uid] = (response_bytes, score)
 
     @property
@@ -72,7 +74,7 @@ class PoEProver:
         responses = responses[:n]
         scores = scores[:n]
 
-        salt = random.randint(0, 2**63)
+        salt = secrets.randbelow(2**63)
 
         return {
             "miner_uids": miner_uids,
@@ -90,6 +92,9 @@ class PoEProver:
             raise ValueError("No evaluations accumulated")
 
         eval_data = self._build_eval_data(epoch, challenge_nonce)
+
+        if sum(eval_data["scores"]) == 0:
+            raise ValueError("All scores are zero — proving would fail in nargo")
 
         with tempfile.TemporaryDirectory(prefix="poe-") as tmpdir:
             # Step 1: Write evaluation data JSON
@@ -133,7 +138,7 @@ class PoEProver:
             "--commitment-helper", self.config.commitment_helper_dir,
             "--nargo", self.config.nargo_binary,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(
                 f"poe-witness failed (exit {result.returncode}):\n"
@@ -143,7 +148,7 @@ class PoEProver:
     def _run_nargo_execute(self) -> None:
         """Run nargo execute in the circuit directory."""
         cmd = [self.config.nargo_binary, "execute", "--program-dir", self.config.circuit_dir]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(
                 f"nargo execute failed (exit {result.returncode}):\n"
@@ -164,7 +169,7 @@ class PoEProver:
         ]
         if keccak:
             cmd.extend(["--oracle_hash", "keccak"])
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(
                 f"bb prove failed (exit {result.returncode}):\n"

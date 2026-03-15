@@ -105,6 +105,25 @@ impl AttestationReader {
     }
 }
 
+/// Verify a Merkle path locally without trusting the relayer.
+///
+/// NOTE: This is a stub. Full implementation is blocked on zkVerify
+/// documenting their exact Merkle hash function (Poseidon2 vs Keccak256
+/// vs a domain-separated variant). Until then, we log a warning and
+/// return the unverified result from is_proof_attested().
+pub fn verify_merkle_path_local(
+    merkle_path: &MerklePath,
+    leaf_digest: &str,
+) -> bool {
+    tracing::warn!(
+        root = %merkle_path.root,
+        leaf = %leaf_digest,
+        path_len = merkle_path.path.len(),
+        "Merkle path verification not yet implemented - trusting relayer response"
+    );
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

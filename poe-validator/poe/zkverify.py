@@ -74,25 +74,25 @@ class ZkVerifySubmitter:
                 )
                 vk_path = os.path.join(vk_dir, "vk")
 
-            # Public inputs: extract from circuit if not provided
+            # Public inputs: extract from Prover.toml if not provided
             if public_inputs_path is None:
-                # For now, use empty public inputs file
                 public_inputs_path = os.path.join(tmpdir, "pubs")
+                pubs = self._extract_public_inputs()
                 with open(public_inputs_path, "wb") as f:
-                    f.write(b"")
+                    f.write(pubs)
 
             cmd = [
                 self.zkv_config.zkverify_binary, "submit",
                 "--proof", proof_file,
                 "--vk", vk_path,
                 "--pubs", public_inputs_path,
-                "--api-key", self.zkv_config.api_key,
                 "--relayer-url", self.zkv_config.relayer_url,
                 "--variant", self.zkv_config.variant,
                 "--tempo", str(self.zkv_config.tempo_seconds),
             ]
+            env = {**os.environ, "ZKVERIFY_API_KEY": self.zkv_config.api_key}
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
             if result.returncode != 0:
                 raise RuntimeError(
                     f"poe-zkverify submit failed: {result.stderr}"
@@ -104,6 +104,35 @@ class ZkVerifySubmitter:
                 optimistic_verification=data.get("optimistic_verification", False),
             )
 
+    def _extract_public_inputs(self) -> bytes:
+        """Extract 5 public inputs from Prover.toml as 32-byte big-endian fields.
+
+        Public inputs: input_commitment, weight_commitment, epoch,
+        validator_id, challenge_nonce.
+        """
+        prover_toml = os.path.join(
+            self.poe_config.circuit_dir, "Prover.toml"
+        )
+        field_names = [
+            "input_commitment", "weight_commitment",
+            "epoch", "validator_id", "challenge_nonce",
+        ]
+        values = {}
+        with open(prover_toml) as f:
+            for line in f:
+                for name in field_names:
+                    if line.startswith(f"{name} = "):
+                        val = line.split("=", 1)[1].strip().strip("'").strip('"')
+                        if val.startswith("0x"):
+                            values[name] = int(val, 16)
+                        else:
+                            values[name] = int(val)
+        if len(values) != 5:
+            raise RuntimeError(
+                f"Expected 5 public inputs, found {len(values)} in {prover_toml}"
+            )
+        return b"".join(values[n].to_bytes(32, "big") for n in field_names)
+
     def wait_for_attestation(
         self, job_id: str, timeout: int = 300
     ) -> AttestationResult:
@@ -113,10 +142,10 @@ class ZkVerifySubmitter:
             "--job-id", job_id,
             "--timeout", str(timeout),
             "--relayer-url", self.zkv_config.relayer_url,
-            "--api-key", self.zkv_config.api_key,
         ]
+        env = {**os.environ, "ZKVERIFY_API_KEY": self.zkv_config.api_key}
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         if result.returncode != 0:
             raise RuntimeError(
                 f"poe-zkverify attest failed: {result.stderr}"

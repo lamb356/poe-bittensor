@@ -8,7 +8,7 @@ pub fn normalize_scores(scores: &[u64]) -> Vec<u64> {
     let total: u64 = scores.iter().sum();
     assert!(total > 0, "Total score must be nonzero");
 
-    scores.iter().map(|&s| s * MAX_WEIGHT / total).collect()
+    scores.iter().map(|&s| ((s as u128) * (MAX_WEIGHT as u128) / (total as u128)) as u64).collect()
 }
 
 #[cfg(test)]
@@ -45,6 +45,21 @@ mod tests {
         }
         let sum: u64 = weights.iter().sum();
         assert_eq!(sum, 1023 * 64); // 65472
+    }
+
+    #[test]
+    fn test_normalize_no_u64_overflow() {
+        // Scores large enough that s * MAX_WEIGHT would overflow u64
+        // (1 << 50) * 65535 > u64::MAX, but u128 handles it
+        let mut scores = vec![0u64; NUM_MINERS];
+        scores[0] = 1u64 << 50;
+        scores[1] = 1u64 << 50;
+        let weights = normalize_scores(&scores);
+        // Each active miner should get ~32767
+        assert!(weights[0] > 32000, "Weight {} too low", weights[0]);
+        assert!(weights[0] < 33000, "Weight {} too high", weights[0]);
+        // Inactive miners get 0
+        assert_eq!(weights[2], 0);
     }
 
     #[test]

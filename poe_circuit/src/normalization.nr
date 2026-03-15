@@ -14,7 +14,7 @@ use crate::types::{NUM_MINERS, MAX_WEIGHT, MIN_WEIGHT_SUM};
 // into the same loop to eliminate a second pass.
 //
 // Gate cost reduction:
-//   - 64 Field.lt() calls -> 64 pairs of 70-bit range checks
+//   - 64 Field.lt() calls -> 64 pairs of 48-bit range checks
 //   - 2 Field.lt() calls for weight sum -> 2 small range checks
 //   - Eliminates separate verify_weight_sum function
 //
@@ -40,9 +40,9 @@ pub fn verify_weight_proportionality_and_sum(
     }
     assert(total_score != 0, "Total score must be nonzero");
 
-    // Constrain total_score to 70 bits.
+    // Constrain total_score to 48 bits.
     // This enables remainder range checks below.
-    // If a malicious prover passes scores that sum to > 2^70,
+    // If a malicious prover passes scores that sum to > 2^48,
     // this assertion fails.
     total_score.assert_max_bit_size::<TOTAL_SCORE_BITS>();
 
@@ -53,9 +53,9 @@ pub fn verify_weight_proportionality_and_sum(
         let remainder = expected_numerator - weights[i] * total_score;
 
         // Prove 0 <= remainder < total_score:
-        // 1. remainder fits in 70 bits (proves it's small, not a wrapped negative)
+        // 1. remainder fits in 48 bits (proves it's small, not a wrapped negative)
         remainder.assert_max_bit_size::<TOTAL_SCORE_BITS>();
-        // 2. (total_score - remainder - 1) fits in 70 bits (proves remainder < total_score)
+        // 2. (total_score - remainder - 1) fits in 48 bits (proves remainder < total_score)
         (total_score - remainder - 1).assert_max_bit_size::<TOTAL_SCORE_BITS>();
 
         weight_sum += weights[i];
@@ -74,22 +74,19 @@ pub fn verify_weight_proportionality(
     verify_weight_proportionality_and_sum(scores, weights);
 }
 
-pub fn verify_weight_sum(_weights: [Field; NUM_MINERS]) {
-    // Now handled inside verify_weight_proportionality_and_sum.
-    // This function is a no-op kept for API compatibility.
-}
-
 // ============================================================
 // Helper: compute weights from scores (for tests)
 // ============================================================
-pub fn compute_weights(scores: [Field; NUM_MINERS]) -> [Field; NUM_MINERS] {
-    let mut total: Field = 0;
+unconstrained pub fn compute_weights(scores: [Field; NUM_MINERS]) -> [Field; NUM_MINERS] {
+    // Use u64 arithmetic for integer truncating division (not Field modular inverse)
+    let mut total: u64 = 0;
     for i in 0..NUM_MINERS {
-        total += scores[i];
+        total += scores[i] as u64;
     }
     let mut weights: [Field; NUM_MINERS] = [0; NUM_MINERS];
     for i in 0..NUM_MINERS {
-        weights[i] = (scores[i] * 65535) / total;
+        let w: u64 = (scores[i] as u64) * 65535 / total;
+        weights[i] = w as Field;
     }
     weights
 }

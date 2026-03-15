@@ -27,10 +27,7 @@ impl ZkVerifyBridge {
 
     /// Register a verification key (one-time per circuit). Returns VK hash.
     pub async fn register_vk(&self, vk_bytes: &[u8]) -> Result<String> {
-        let url = format!(
-            "{}/register-vk/{}",
-            self.config.relayer_url, self.config.api_key
-        );
+        let url = format!("{}/register-vk", self.config.relayer_url);
 
         let body = serde_json::json!({
             "proofType": "ultrahonk",
@@ -40,7 +37,11 @@ impl ZkVerifyBridge {
             "vk": bytes_to_hex(vk_bytes),
         });
 
-        let resp = self.client.post(&url).json(&body).send().await?;
+        let resp = self.client.post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .json(&body)
+            .send()
+            .await?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -65,10 +66,7 @@ impl ZkVerifyBridge {
         vk_bytes: &[u8],
         public_inputs: &[u8],
     ) -> Result<SubmitProofResponse> {
-        let url = format!(
-            "{}/submit-proof/{}",
-            self.config.relayer_url, self.config.api_key
-        );
+        let url = format!("{}/submit-proof", self.config.relayer_url);
 
         let request = SubmitProofRequest {
             proof_type: "ultrahonk".into(),
@@ -83,7 +81,11 @@ impl ZkVerifyBridge {
             }),
         };
 
-        let resp = self.client.post(&url).json(&request).send().await?;
+        let resp = self.client.post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .json(&request)
+            .send()
+            .await?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -181,7 +183,7 @@ impl ZkVerifyBridge {
 mod tests {
     use super::*;
     use wiremock::{MockServer, Mock, ResponseTemplate};
-    use wiremock::matchers::{method, path_regex};
+    use wiremock::matchers::{method, path, path_regex};
 
     fn test_config(server_url: &str) -> ZkVerifyConfig {
         ZkVerifyConfig {
@@ -197,7 +199,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/submit-proof/.*"))
+            .and(path("/submit-proof"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "jobId": "job-123",
                 "optimisticVerification": true,
@@ -220,7 +222,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/submit-proof/.*"))
+            .and(path("/submit-proof"))
             .respond_with(ResponseTemplate::new(400).set_body_string("Bad proof format"))
             .mount(&server)
             .await;
@@ -245,7 +247,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/submit-proof/.*"))
+            .and(path("/submit-proof"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "jobId": "job-456",
             })))
@@ -266,7 +268,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/submit-proof/.*"))
+            .and(path("/submit-proof"))
             .respond_with(ResponseTemplate::new(422).set_body_string("Invalid proof"))
             .expect(1) // Should only be called once — no retry on 4xx
             .mount(&server)
@@ -285,7 +287,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/submit-proof/.*"))
+            .and(path("/submit-proof"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal error"))
             .mount(&server)
             .await;
@@ -328,7 +330,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path_regex("/register-vk/.*"))
+            .and(path("/register-vk"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "vkHash": "0x1234567890abcdef",
             })))
