@@ -1,6 +1,6 @@
 use crate::eval_modules::field_math::{
-    bounded_lt, fixed_div, fixed_mul, signed_add, signed_lt, signed_mul, signed_neg, signed_pos,
-    signed_sub, signed_zero, SignedField, sn8_compute_time_weight, verify_time_weight,
+    bounded_lt, fixed_div, fixed_mul, signed_add, signed_lt, signed_neg, signed_pos, signed_sub,
+    signed_zero, SignedField, sn8_compute_time_weight, verify_time_weight,
 };
 use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 

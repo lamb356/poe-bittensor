@@ -101,6 +101,7 @@ fn test_honest_validator() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -134,6 +135,7 @@ fn test_wrong_weights_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let mut weights = unsafe { compute_weights(scores) };
 
     weights[0] = weights[0] + 1000;
@@ -169,6 +171,7 @@ fn test_wrong_responses_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -204,6 +207,7 @@ fn test_replay_different_epoch_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -238,6 +242,7 @@ fn test_wrong_challenge_nonce_rejected() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -340,6 +345,7 @@ fn test_full_poe_arithmetic() {
 
     // Compute expected scores and weights
     let scores = compute_arithmetic_scores(hashes, eval_params);
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -372,6 +378,7 @@ fn test_full_poe_wrong_weights_rejected() {
 
     let eval_params: [Field; MAX_PARAMS] = [1, 50, 0, 0];
     let scores = compute_arithmetic_scores(hashes, eval_params);
+    // Safety: compute_weights is unconstrained but deterministic
     let mut weights = unsafe { compute_weights(scores) };
 
     // Tamper with weights
@@ -408,6 +415,7 @@ fn run_with_scores(scores: [Field; NUM_MINERS]) {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -592,6 +600,7 @@ fn test_adversarial_swapped_scores() {
     let nonce = test_challenge_nonce();
 
     // Compute correct weights from original scores
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     // Swap scores[0] and scores[1] -- weights no longer match
@@ -630,6 +639,7 @@ fn test_adversarial_score_redistribution() {
     let nonce = test_challenge_nonce();
 
     // Compute correct weights
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     // Redistribute: +100 to miner 0, -100 from miner 1
@@ -666,6 +676,7 @@ fn test_adversarial_different_miner_uids() {
     let epoch = test_epoch();
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     // Compute commitments with original UIDs
@@ -714,6 +725,7 @@ fn test_salt_reuse_different_epochs() {
 #[test]
 fn test_different_validator_different_commitment() {
     let scores = test_scores();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
     let epoch = test_epoch();
 
@@ -732,6 +744,7 @@ fn test_adversarial_wrong_validator_id() {
     let salt = test_salt();
     let epoch = test_epoch();
     let nonce = test_challenge_nonce();
+    // Safety: compute_weights is unconstrained but deterministic
     let weights = unsafe { compute_weights(scores) };
 
     // Commitments bound to validator 12345
@@ -788,6 +801,7 @@ fn test_fuzz_valid_scores() {
     // Test 20 different score vectors
     for seed_idx in 1..21 {
         let scores = pseudo_random_scores(seed_idx as Field);
+        // Safety: compute_weights is unconstrained but deterministic
         let weights = unsafe { compute_weights(scores) };
 
         let ic = compute_input_commitment(uids, hashes, nonce, epoch, salt);
@@ -822,6 +836,7 @@ fn test_fuzz_tampered_weights_rejected() {
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
 
+    // Safety: compute_weights is unconstrained but deterministic
     let mut weights = unsafe { compute_weights(scores) };
 
     // Tamper: redistribute weight from miner 0 to miner 1
@@ -858,6 +873,7 @@ fn test_fuzz_single_weight_off_by_one() {
     let vid = test_validator_id();
     let nonce = test_challenge_nonce();
 
+    // Safety: compute_weights is unconstrained but deterministic
     let mut weights = unsafe { compute_weights(scores) };
 
     // Off by just 1 -- should still be caught
