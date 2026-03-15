@@ -10,6 +10,7 @@ evaluation functions on miner outputs, rather than copying weights from other va
 - Rust witness generator bridges Python validator -> Noir prover
 - Commitment helper (Noir) computes Poseidon2 commitments for the witness generator
 - Three integration paths: validator sidecar -> zkVerify bridge -> Subtensor pallet
+- zkVerify API: testnet.kurier.xyz (was horizenlabs.io, rebranded to Kurier)
 
 ## Project Structure
 - `poe_minimal/` -- Piece 0: 8-miner Lite PoE circuit (toolchain validation, 5,675 gates)
@@ -42,7 +43,7 @@ evaluation functions on miner outputs, rather than copying weights from other va
 | Circuit | Miners | ACIR Opcodes | UltraHonk Gates |
 |---------|--------|-------------|-----------------|
 | poe_minimal | 8 | 923 | 5,675 |
-| poe_circuit | 64 | 374 | 5,621 (optimized) |
+| poe_circuit | 64 | 502 | 5,812 (optimized + H-01 range checks) |
 
 ## Build Order
 Piece 0: Minimal circuit (8 miners) -- COMPLETE

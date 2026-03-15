@@ -53,7 +53,7 @@ Add PoE to your validator's `forward()` function:
 
 ```python
 from poe import PoEProver, PoEConfig
-from poe.challenge import get_mock_nonce  # Use get_drand_nonce in production
+from poe.challenge import get_mock_nonce  # Use get_challenge_nonce in production
 
 # Initialize once (in __init__ or startup)
 poe_config = PoEConfig.from_poe_root("/path/to/poe-bittensor")
@@ -72,7 +72,7 @@ def forward(self):
 
     # Before set_weights:
     # === ADD THESE 2 LINES ===
-    nonce = get_mock_nonce(self.current_epoch)  # or get_drand_nonce()
+    nonce = get_mock_nonce(self.current_epoch)  # or get_challenge_nonce()
     proof = prover.prove(self.current_epoch, nonce)
     prover.reset()
 

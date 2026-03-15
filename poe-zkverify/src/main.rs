@@ -44,7 +44,7 @@ enum Commands {
         api_key: String,
 
         /// Relayer API URL.
-        #[arg(long, default_value = "https://relayer-api-testnet.horizenlabs.io/api/v1")]
+        #[arg(long, default_value = "https://testnet.kurier.xyz/api/v1")]
         relayer_url: String,
 
         /// UltraHonk variant: plain or zk.
@@ -63,7 +63,7 @@ enum Commands {
         job_id: String,
 
         /// Relayer API URL.
-        #[arg(long, default_value = "https://relayer-api-testnet.horizenlabs.io/api/v1")]
+        #[arg(long, default_value = "https://testnet.kurier.xyz/api/v1")]
         relayer_url: String,
     },
 
@@ -78,7 +78,7 @@ enum Commands {
         timeout: u64,
 
         /// Relayer API URL.
-        #[arg(long, default_value = "https://relayer-api-testnet.horizenlabs.io/api/v1")]
+        #[arg(long, default_value = "https://testnet.kurier.xyz/api/v1")]
         relayer_url: String,
 
         /// API key (needed for job status).
@@ -97,7 +97,7 @@ enum Commands {
         api_key: String,
 
         /// Relayer API URL.
-        #[arg(long, default_value = "https://relayer-api-testnet.horizenlabs.io/api/v1")]
+        #[arg(long, default_value = "https://testnet.kurier.xyz/api/v1")]
         relayer_url: String,
 
         /// UltraHonk variant: plain or zk.

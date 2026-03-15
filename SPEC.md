@@ -407,7 +407,7 @@ LITE POE CONSTRAINTS:
   4. Validator identity + challenge nonce (Constraints 5, nonce from 1)
   5. NO score computation constraint (Constraint 2 skipped)
 
-Gate count: ~40K for 64 miners → <1s proving
+Gate count: ~5.8K for 64 miners → <1s proving
 ```
 
 This prevents pure weight copying — a copier has no miner responses to commit to and cannot produce a valid input commitment for the current epoch's challenge nonce. It doesn't prevent a validator from fabricating scores, but it forces them to at least query miners and construct a plausible score vector, which is meaningful work.
@@ -581,7 +581,7 @@ poe_minimal/
 **Prerequisite**: Piece 0 gate counts recorded. If 8-miner circuit was N gates, expect 64-miner circuit to be roughly 8×N (linear scaling from Poseidon2 sponge hashing + per-miner constraints).
 
 **Measured Results** (completed, optimized):
-- 64-miner circuit: 374 ACIR opcodes, 5,621 UltraHonk gates
+- 64-miner circuit: 502 ACIR opcodes, 5,812 UltraHonk gates
 - **85.0% gate reduction** from 37,443 via bounded range checks + UID/weight packing
 - Proves in <0.5s on commodity hardware
 - All 54 circuit tests pass (including 20 fuzz + 8 adversarial tests)
@@ -606,7 +606,7 @@ Pattern: Instead of `remainder.lt(bound)`, use:
 | Miners | Estimated Gates | Proving Time | Notes |
 |--------|----------------|-------------|-------|
 | 8      | ~1,100         | <0.1s       | Piece 0 minimal |
-| 64     | 5,621          | <0.3s       | Piece 1 (measured) |
+| 64     | 5,812          | <0.3s       | Piece 1 (measured) |
 | 128    | ~11,000        | <0.5s       | Linear extrapolation |
 | 256    | ~22,000        | <0.8s       | Full validator capacity |
 | 512    | ~44,000        | <1.5s       | Extended capacity |
@@ -617,7 +617,7 @@ constraint is trivially met even at 512 miners.
 **Tech stack**:
 - Noir (latest stable) with Barretenberg UltraHonk backend
 - Poseidon for all in-circuit hashing (~240 constraints per hash)
-- Target: 64 miners, ~40K gates, <1s proving
+- Target: 64 miners, ~5.8K gates, <1s proving
 
 **Deliverables**:
 ```

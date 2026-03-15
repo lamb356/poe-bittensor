@@ -6,12 +6,12 @@ Proof-of-Evaluation (PoE) is a ZK protocol that cryptographically proves Bittens
 
 | Metric | Value |
 |--------|-------|
-| Circuit size | **5,621 UltraHonk gates** (85% optimized from 37,443) |
+| Circuit size | **5,812 UltraHonk gates** (84% optimized from 37,443) |
 | Proof size | 14,244 bytes |
 | Proving time | <0.5s (64 miners, commodity hardware) |
 | Verification time | ~45ms constant |
 | Circuit tests | 54 (including 20 fuzz + 8 adversarial) |
-| Total tests | 141+ across all packages |
+| Total tests | 156+ across all packages |
 | TLA+ states verified | 78M+ (4 honest, 3 copier, 5 miner, 5 epoch model) |
 
 ## Project Structure
@@ -19,7 +19,7 @@ Proof-of-Evaluation (PoE) is a ZK protocol that cryptographically proves Bittens
 ```
 poe-bittensor/
   poe_minimal/         Piece 0: 8-miner circuit (toolchain validation)
-  poe_circuit/         Piece 1: 64-miner Lite PoE circuit (5,621 gates, 54 tests)
+  poe_circuit/         Piece 1: 64-miner Lite PoE circuit (5,812 gates, 54 tests)
   commitment_helper/   Noir circuit for Poseidon2 commitment computation
   poe-witness/         Piece 2: Rust witness generator (BLAKE3 + normalization)
   poe-validator/       Piece 4: Python package for Bittensor validator integration
@@ -105,7 +105,7 @@ prover.reset()  # Clear for next epoch
 
 ## Optimization Highlights
 
-The circuit achieved an **85% gate reduction** (37,443 to 5,621) through two techniques:
+The circuit achieved an **84% gate reduction** (37,443 to 5,812) through two techniques:
 
 1. **Range check substitution**: `Field.lt()` costs ~435 gates per call in UltraHonk (254-bit field decomposition). `assert_max_bit_size::<N>()` costs ~ceil(N/14) gates (UltraHonk lookup tables). Replacing 66 `Field.lt()` calls saved ~28K gates.
 
