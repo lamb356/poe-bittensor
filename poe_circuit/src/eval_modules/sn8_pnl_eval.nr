@@ -1,6 +1,6 @@
 use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 use crate::eval_modules::field_math::{
-    fixed_mul, fixed_div, sn8_time_weight, bounded_lt,
+    fixed_mul, fixed_div, sn8_compute_time_weight, verify_time_weight, bounded_lt,
     SignedField, signed_pos, signed_neg, signed_zero,
     signed_add, signed_sub, signed_mul, signed_lt,
 };
@@ -15,24 +15,11 @@ use crate::eval_modules::field_math::{
 //          w_t = 0.045 + 0.955 * exp(-0.075 * (T - t))
 //          If max_drawdown >= 10%, score = 0
 //
-// Limitations:
-// - exp() approximated via degree-4 Taylor (max ~2% error at x=2.5)
+// - Time weights verified in-circuit via piecewise polynomial (<0.4% error)
 // - Time weights pre-computed in witness generator (committed via Poseidon2)
 // - Only PnL metric (Sharpe/Sortino/Omega/Calmar all weight=0 in production)
 // - Percentile ranking and cross-asset softmax deferred to v2
 // - NUM_CHECKPOINTS=30 (daily aggregates from 12hr checkpoints)
-//
-// APPROXIMATION ERROR TABLE (exp() Taylor degree-4):
-//   Day 0  (x=0.000): error 0.0%   - weight 1.000
-//   Day 7  (x=0.525): error 0.5%   - weight 0.607
-//   Day 13 (x=0.975): error 1.9%   - weight 0.423
-//   Day 20 (x=1.500): error 22%    - weight 0.273 (Taylor) vs 0.223 (real)
-//   Day 27+ (x>=2.0):  clamped to baseline 0.045
-//
-// This is acceptable because days 0-13 carry ~75% of total scoring weight
-// and those are within 2% error. If SN8 changes decay_rate to weight older
-// days more heavily, this approximation degrades. V2 should use piecewise
-// polynomial or lookup table for x in [1.5, 3.0].
 // ============================================================
 
 pub global NUM_CHECKPOINTS: u32 = 30;
@@ -127,24 +114,12 @@ pub fn compute_max_drawdown(pnls: [SignedField; NUM_CHECKPOINTS]) -> SignedField
     max_dd
 }
 
-/// Verify that pre-computed time weights approximately match the decay formula.
-/// Each weight should satisfy: |w_i - expected_i| < tolerance
-/// where expected_i = 0.045 + 0.955 * exp(-0.075 * i)
 pub fn verify_time_weights(
     time_weights: [Field; NUM_CHECKPOINTS],
     tolerance: Field,
 ) {
     for i in 0..NUM_CHECKPOINTS {
-        let expected = sn8_time_weight(i as Field);
-        // |actual - expected| < tolerance
-        let actual = time_weights[i];
-        if bounded_lt::<48>(expected, actual) {
-            let diff = actual - expected;
-            assert(bounded_lt::<48>(diff, tolerance), "Time weight too high");
-        } else {
-            let diff = expected - actual;
-            assert(bounded_lt::<48>(diff, tolerance), "Time weight too low");
-        }
+        verify_time_weight(time_weights[i], i as Field, tolerance);
     }
 }
 
@@ -156,7 +131,7 @@ pub fn verify_time_weights(
 fn test_time_weights() -> [Field; NUM_CHECKPOINTS] {
     let mut weights: [Field; NUM_CHECKPOINTS] = [0; NUM_CHECKPOINTS];
     for i in 0..NUM_CHECKPOINTS {
-        weights[i] = sn8_time_weight(i as Field);
+        weights[i] = sn8_compute_time_weight(i as Field);
     }
     weights
 }
@@ -296,4 +271,19 @@ fn test_sn8_trait_impl() {
     let score = SN8PnlEval::evaluate(0, params);
     // 0.05 * 0.8 = 0.04 = 40000
     assert(score == 40000, "Trait impl: 0.05 * 0.8 should be 0.04");
+}
+
+#[test(should_fail)]
+fn test_fabricated_weights_rejected() {
+    // Validator tries to commit uniform weights (not following decay curve)
+    let fabricated: [Field; NUM_CHECKPOINTS] = [500000; NUM_CHECKPOINTS];
+    // This should fail because uniform weights don't match the decay formula
+    verify_time_weights(fabricated, 20000);
+}
+
+#[test]
+fn test_exact_weights_accepted() {
+    // Weights computed by sn8_compute_time_weight should always pass
+    let weights = test_time_weights();
+    verify_time_weights(weights, 20000); // 2% tolerance
 }

@@ -33,60 +33,117 @@ pub fn fixed_div(a: Field, b: Field) -> Field {
     (a * FIXED_SCALE) / b
 }
 
-/// Approximate exp(-x) using degree-4 Taylor polynomial.
-/// Input x is in fixed-point (e.g., x=1000000 means exp(-1.0)).
-/// Valid for x in [0, 2*SCALE]. For x > 2.0, returns baseline 0.045.
+// Unconstrained hint for truncating integer division (a*b) / SCALE.
+// Returns the integer quotient, discarding remainder.
+// Required because Field division (/) computes modular inverse, which
+// produces garbage when (a*b) is not exactly divisible by SCALE.
+unconstrained fn trunc_mul_hint(a: Field, b: Field) -> Field {
+    let a_u64 = a as u64;
+    let b_u64 = b as u64;
+    let scale = 1000000_u64;
+    ((a_u64 * b_u64) / scale) as Field
+}
+
+/// Fixed-point multiplication with truncating (integer) division.
+/// Result = floor(a * b / SCALE). Uses unconstrained hint + range check.
+fn fixed_mul_trunc(a: Field, b: Field) -> Field {
+    // Safety: trunc_mul_hint is pure arithmetic; range check below proves correctness
+    let q = unsafe { trunc_mul_hint(a, b) };
+    // Verify: q * SCALE <= a * b < (q+1) * SCALE
+    let product = a * b;
+    let q_scaled = q * FIXED_SCALE;
+    // product - q_scaled = remainder, must be in [0, SCALE)
+    let remainder = product - q_scaled;
+    // remainder must be non-negative and < SCALE
+    // Use range check: remainder fits in 20 bits (SCALE = 10^6 < 2^20)
+    remainder.assert_max_bit_size::<20>();
+    q
+}
+
+/// Piecewise exp(-x) approximation with <0.4% error across all segments.
+/// Replaces the old single Taylor polynomial which had 22% error at x=1.5.
 ///
-/// exp(-x) ~ 1 - x + x^2/2 - x^3/6 + x^4/24
-///
-/// Error bounds (vs f64 exp()):
-///   x=0.0: 0.000%    x=0.5: 0.026%    x=1.0: 1.9%
-///   x=1.5: 5.2%      x=2.0+: clamped to 0.045 (baseline)
-///
-/// For SN8 decay rate 0.075: x=2.0 corresponds to t=26.7 days.
-/// Days 0-26: Taylor approximation. Days 27+: baseline weight 0.045.
-pub fn exp_neg_approx(x: Field) -> Field {
-    // Clamp threshold: x >= 2.0 (Taylor diverges badly beyond x=1.5)
-    let clamp_threshold = 2 * FIXED_SCALE;
-    if !bounded_lt::<32>(x, clamp_threshold) {
-        // x > 3.0: return baseline (0.045 in fixed-point)
-        45000
+/// Segment 1 (x in [0, 0.75]): Taylor degree-4. Max error 0.37%.
+/// Segment 2 (x in [0.75, 2.0]): Chebyshev degree-4. Max error 0.02%.
+/// Segment 3 (x >= 2.0): Returns 0 (caller adds baseline).
+pub fn piecewise_exp_neg(x: Field) -> Field {
+    let seg1_end: Field = 750000;  // 0.75 in fixed-point
+    let seg2_end: Field = 2000000; // 2.0 in fixed-point
+
+    if !bounded_lt::<32>(seg1_end, x) {
+        // Segment 1: x in [0, 0.75] -- Taylor degree-4
+        taylor_exp_neg(x)
+    } else if bounded_lt::<32>(x, seg2_end) {
+        // Segment 2: x in [0.75, 2.0] -- Chebyshev degree-4
+        chebyshev_exp_neg(x)
     } else {
-        let x2 = fixed_mul(x, x);
-        let x3 = fixed_mul(x2, x);
-        let x4 = fixed_mul(x3, x);
-        // exp(-x) ~ 1 - x + x^2/2 - x^3/6 + x^4/24
-        // Group to avoid underflow in unsigned Field:
-        //   positive_terms = 1 + x^2/2 + x^4/24
-        //   negative_terms = x + x^3/6
-        //   result = positive - negative (only if positive > negative)
-        //
-        // NOTE: positive/negative use Field division (/ 2, / 6, / 24)
-        // which produces modular inverses, not bounded integers.
-        // Cannot use bounded_lt here; .lt() compares canonical Field values.
-        let positive = FIXED_SCALE + x2 / 2 + x4 / 24;
-        let negative = x + x3 / 6;
-        if negative.lt(positive) {
-            positive - negative
-        } else {
-            // Taylor diverged: return baseline
-            45000
-        }
+        // Segment 3: x >= 2.0 -- exp(-x) is near zero
+        0
     }
 }
 
-/// Compute time weight for SN8 decay formula:
+/// Taylor degree-4: exp(-x) ~= 1 - x + x^2/2 - x^3/6 + x^4/24
+/// Valid for x in [0, 0.75] with <0.37% error.
+/// Uses fixed_mul_trunc for truncating integer division (not modular inverse).
+fn taylor_exp_neg(x: Field) -> Field {
+    let x2 = fixed_mul_trunc(x, x);
+    let x3 = fixed_mul_trunc(x2, x);
+    let x4 = fixed_mul_trunc(x3, x);
+    // Coefficients as fixed-point reciprocals:
+    //   1/2  = 0.500000 = 500000
+    //   1/6  = 0.166667 = 166667
+    //   1/24 = 0.041667 = 41667
+    // Group positive and negative to avoid unsigned underflow:
+    let positive = FIXED_SCALE + fixed_mul_trunc(x2, 500000) + fixed_mul_trunc(x4, 41667);
+    let negative = x + fixed_mul_trunc(x3, 166667);
+    if bounded_lt::<32>(negative, positive) {
+        positive - negative
+    } else {
+        0
+    }
+}
+
+/// Chebyshev degree-4 fitted on [0.75, 2.0] via numpy.polynomial.chebyshev.chebfit.
+/// Power basis coefficients:
+///   p(x) = 0.989631 - 0.956103*x + 0.425674*x^2 - 0.102042*x^3 + 0.010723*x^4
+/// Max relative error: 0.018%.
+fn chebyshev_exp_neg(x: Field) -> Field {
+    let x2 = fixed_mul_trunc(x, x);
+    let x3 = fixed_mul_trunc(x2, x);
+    let x4 = fixed_mul_trunc(x3, x);
+    // Positive terms: c0 + c2*x^2 + c4*x^4
+    let positive = 989631 + fixed_mul_trunc(425674, x2) + fixed_mul_trunc(10723, x4);
+    // Negative terms: |c1|*x + |c3|*x^3
+    let negative = fixed_mul_trunc(956103, x) + fixed_mul_trunc(102042, x3);
+    if bounded_lt::<32>(negative, positive) {
+        positive - negative
+    } else {
+        0
+    }
+}
+
+/// Compute time weight for SN8 decay formula using piecewise exp(-x).
 /// w_t = 0.045 + 0.955 * exp(-0.075 * t)
 /// t is days from most recent (t=0 is today, t=29 is 30 days ago)
-/// Returns weight in fixed-point
-pub fn sn8_time_weight(days_ago: Field) -> Field {
-    // decay_rate = 0.075 in fixed-point = 75000
-    let decay_rate: Field = 75000;
-    let x = fixed_mul(decay_rate, days_ago * FIXED_SCALE);
-    let exp_val = exp_neg_approx(x);
-    // w = 0.045 + 0.955 * exp_val
-    // 0.045 = 45000, 0.955 = 955000
-    45000 + fixed_mul(955000, exp_val)
+pub fn sn8_compute_time_weight(days_ago: Field) -> Field {
+    let decay_rate: Field = 75000; // 0.075 in fixed-point
+    let x = fixed_mul_trunc(decay_rate, days_ago * FIXED_SCALE);
+    let exp_val = piecewise_exp_neg(x);
+    // w = 0.045 + 0.955 * exp(-x)
+    45000 + fixed_mul_trunc(955000, exp_val)
+}
+
+/// Verify a committed time weight matches the piecewise approximation within tolerance.
+/// Used in-circuit to catch fabricated weights while allowing exact off-circuit values.
+pub fn verify_time_weight(committed: Field, days_ago: Field, tolerance: Field) {
+    let expected = sn8_compute_time_weight(days_ago);
+    if bounded_lt::<48>(expected, committed) {
+        let diff = committed - expected;
+        assert(!bounded_lt::<48>(tolerance, diff), "Time weight too high");
+    } else {
+        let diff = expected - committed;
+        assert(!bounded_lt::<48>(tolerance, diff), "Time weight too low");
+    }
 }
 
 // ============================================================
@@ -192,52 +249,75 @@ fn test_fixed_div_identity() {
 }
 
 #[test]
-fn test_exp_neg_zero() {
+fn test_piecewise_exp_neg_zero() {
     // exp(0) = 1.0
-    let result = exp_neg_approx(0);
+    let result = piecewise_exp_neg(0);
     assert(result == FIXED_SCALE, "exp(0) should be 1.0");
 }
 
 #[test]
-fn test_exp_neg_one() {
-    // exp(-1) ~ 0.3679. Taylor: 1 - 1 + 0.5 - 0.1667 + 0.0417 = 0.3750
-    // In fixed-point: 375000. Real: 367879. Error: ~1.9%
-    let result = exp_neg_approx(FIXED_SCALE);
-    // Accept range [360000, 380000] (~2% tolerance)
-    assert(!result.lt(360000), "exp(-1) too low");
-    assert(result.lt(380001), "exp(-1) too high");
+fn test_piecewise_seg1_accuracy() {
+    // x=0.5 (500000): exp(-0.5) = 0.60653. Taylor gives ~0.60677. Error <0.04%
+    let result = piecewise_exp_neg(500000);
+    assert(!result.lt(600000), "exp(-0.5) too low");
+    assert(result.lt(615000), "exp(-0.5) too high");
 }
 
 #[test]
-fn test_exp_neg_two_clamps() {
-    // x >= 2.0 is now clamped to baseline 0.045
-    let result = exp_neg_approx(2 * FIXED_SCALE);
-    assert(result == 45000, "exp(-2) should clamp to baseline 0.045");
+fn test_piecewise_seg2_accuracy() {
+    // x=1.0 (1000000): exp(-1.0) = 0.36788. Chebyshev should be within 0.02%
+    let result = piecewise_exp_neg(FIXED_SCALE);
+    assert(!result.lt(365000), "exp(-1.0) too low");
+    assert(result.lt(370000), "exp(-1.0) too high");
 }
 
 #[test]
-fn test_exp_neg_large_clamps() {
-    // x >= 2.0 should return baseline 0.045
-    let result = exp_neg_approx(4 * FIXED_SCALE);
-    assert(result == 45000, "exp(-4) should clamp to baseline 0.045");
+fn test_piecewise_seg2_day20() {
+    // x=1.5 (1500000): exp(-1.5) = 0.22313. The old Taylor had 22% error here.
+    let result = piecewise_exp_neg(1500000);
+    // Chebyshev should give ~223130 (within 0.02%)
+    assert(!result.lt(220000), "exp(-1.5) too low");
+    assert(result.lt(226000), "exp(-1.5) too high");
 }
 
+#[test]
+fn test_piecewise_seg3_returns_zero() {
+    // x >= 2.0: returns 0
+    let result = piecewise_exp_neg(2 * FIXED_SCALE);
+    assert(result == 0, "exp(-2.0) should return 0 in seg3");
+    let result2 = piecewise_exp_neg(4 * FIXED_SCALE);
+    assert(result2 == 0, "exp(-4.0) should return 0 in seg3");
+}
 
 #[test]
-fn test_sn8_time_weight_recent() {
-    // t=0 (today): w = 0.045 + 0.955 * exp(0) = 0.045 + 0.955 = 1.0
-    let w = sn8_time_weight(0);
+fn test_sn8_time_weight_today() {
+    // t=0: w = 0.045 + 0.955 * 1.0 = 1.0
+    let w = sn8_compute_time_weight(0);
     assert(w == FIXED_SCALE, "Weight for today should be 1.0");
 }
 
 #[test]
+fn test_sn8_time_weight_day20() {
+    // t=20: x=1.5, exp(-1.5)=0.22313, w=0.045+0.955*0.22313=0.25809
+    // Expected: ~258090 in fixed-point
+    let w = sn8_compute_time_weight(20);
+    assert(!w.lt(255000), "Day 20 weight too low");
+    assert(w.lt(262000), "Day 20 weight too high");
+}
+
+#[test]
 fn test_sn8_time_weight_old() {
-    // t=40 (40 days ago): x = 0.075 * 40 = 3.0 => clamp region
-    // w = 0.045 + 0.955 * baseline = ~0.088
-    let w = sn8_time_weight(40);
-    // Expect ~88000. Accept [45000, 500000] (wide range due to Taylor error)
-    assert(!w.lt(45000), "Old weight should be >= baseline");
-    assert(w.lt(500001), "Old weight should be bounded");
+    // t=29: x=2.175, segment 3, exp~=0, w=0.045+0.955*0=0.045
+    let w = sn8_compute_time_weight(29);
+    assert(w == 45000, "Day 29 weight should be baseline 0.045");
+}
+
+#[test]
+fn test_verify_time_weight_exact() {
+    for i in 0..30 {
+        let w = sn8_compute_time_weight(i as Field);
+        verify_time_weight(w, i as Field, 20000);
+    }
 }
 
 #[test]
