@@ -42,3 +42,4 @@ autoresearch/last-run.log
 .claude/
 Prover.toml
 Prover.toml
+commitment_helper/Prover_*.toml

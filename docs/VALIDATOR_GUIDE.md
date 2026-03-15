@@ -163,6 +163,16 @@ cd ../poe-validator && pytest tests/  # 27 tests (including E2E prove+verify)
 | Memory | ~200MB peak during proving |
 | CPU | Single core, no GPU required |
 
+## Security: Authenticated Public Inputs
+
+Public inputs (epoch, validator_id, challenge_nonce) are extracted from the raw proof
+bytes after `bb verify` succeeds. The miner-supplied `public_inputs_json` is NOT used
+for security decisions. This ensures that a malicious miner cannot claim a different
+epoch or nonce than what was actually proved in the circuit.
+
+The extraction reads bytes 4-195 of the UltraHonk proof (6 fields x 32 bytes each,
+big-endian) which are cryptographically bound to the proof by the verification equation.
+
 ## Troubleshooting
 
 **"nargo execute failed"**: Circuit not compiled. Run `cd poe_circuit && nargo compile`.

@@ -36,6 +36,8 @@ class ProofSubmission(_BaseSynapse):
 
     # Optional outputs — set by miner (axon receiver)
     proof_b64: typing.Optional[str] = None       # base64-encoded proof bytes
+    # Diagnostic only — NOT trusted for verification.
+    # Public inputs are extracted from the raw proof bytes.
     public_inputs_json: typing.Optional[str] = None
     proof_timestamp: typing.Optional[float] = None
     zkverify_job_id: typing.Optional[str] = None

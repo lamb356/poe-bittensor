@@ -1,7 +1,6 @@
 """Validator forward pass: query miners for proofs, verify, score."""
 from __future__ import annotations
 
-import json
 import time
 
 import bittensor as bt
@@ -93,54 +92,39 @@ def _verify_response(
 
     if proof_data is None or len(proof_data) < config.min_proof_size:
         bt.logging.debug(
-            f"Proof too small: {len(proof_data)} bytes"
+            f"Proof too small: {len(proof_data) if proof_data else 0} bytes"
         )
         return {"proof_valid": False, "proof_timestamp": time.time()}
 
+    # Verify proof and extract authenticated public inputs
     try:
-        is_valid = validator.verifier.verify(proof_data)
+        result = validator.verifier.verify_and_extract(proof_data)
     except Exception as e:
         bt.logging.warning(f"Proof verification error: {e}")
-        is_valid = False
+        return {"proof_valid": False, "proof_timestamp": time.time()}
 
-    # Require public_inputs_json — without it, epoch/nonce binding cannot be verified
-    if is_valid and not response.public_inputs_json:
-        bt.logging.warning("Valid proof rejected: missing public_inputs_json")
-        is_valid = False
+    is_valid = result.is_valid
 
-    # M-11: Validate public inputs match current challenge
-    if is_valid and response.public_inputs_json:
-        try:
-            pub_inputs = json.loads(response.public_inputs_json)
-
-            # Require all 6 public input fields
-            required = {
-                "input_commitment", "weight_commitment", "score_commitment",
-                "epoch", "validator_id", "challenge_nonce",
-            }
-            missing = required - set(pub_inputs.keys())
-            if missing:
-                bt.logging.warning(f"Missing public input fields: {missing}")
-                is_valid = False
-
-            # Verify epoch matches
-            if pub_inputs.get("epoch") != response.epoch:
-                bt.logging.warning(
-                    f"Epoch mismatch: proof={pub_inputs.get('epoch')}, expected={response.epoch}"
-                )
-                is_valid = False
-
-            # Verify challenge_nonce matches (compare as int to handle str vs int)
-            proof_nonce = pub_inputs.get("challenge_nonce")
-            if proof_nonce is not None and int(proof_nonce) != int(response.challenge_nonce):
-                bt.logging.warning(
-                    f"Nonce mismatch: proof={proof_nonce}, expected={response.challenge_nonce}"
-                )
-                is_valid = False
-
-        except (json.JSONDecodeError, TypeError, ValueError) as e:
-            bt.logging.warning(f"Malformed public_inputs_json: {e}")
+    # Enforce epoch and challenge_nonce from authenticated proof contents
+    if is_valid and result.public_inputs:
+        pi = result.public_inputs
+        if pi.epoch != response.epoch:
+            bt.logging.warning(
+                f"Epoch mismatch: proof={pi.epoch}, expected={response.epoch}"
+            )
             is_valid = False
+        if pi.challenge_nonce != int(response.challenge_nonce):
+            bt.logging.warning(
+                f"Nonce mismatch: proof={pi.challenge_nonce}, "
+                f"expected={response.challenge_nonce}"
+            )
+            is_valid = False
+    elif is_valid:
+        # Extraction failed but proof was valid — fail closed
+        bt.logging.warning(
+            f"Valid proof but public input extraction failed: {result.error}"
+        )
+        is_valid = False
 
     # H-11: Log zkVerify attestation status (soft enforcement)
     if response.zkverify_job_id:

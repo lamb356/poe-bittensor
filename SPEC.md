@@ -812,6 +812,10 @@ for peer_validator in self.metagraph.validators:
         peer_trust[peer_validator.uid] *= POE_PENALTY_FACTOR
 ```
 
+**Trust model**: Public inputs used for epoch/nonce/identity binding are extracted
+directly from the raw UltraHonk proof bytes (bytes 4-195), not from any miner-supplied
+JSON sidecar. The `public_inputs_json` field on the wire protocol is diagnostic-only.
+
 ### Piece 5: Bittensor Subnet Scaffold (Week 6-7)
 
 **Goal**: Fork `opentensor/bittensor-subnet-template` and build the PoE subnet. This is the vehicle for mainnet deployment and emission capture.
