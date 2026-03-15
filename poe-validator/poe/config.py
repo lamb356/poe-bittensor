@@ -1,3 +1,4 @@
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,16 +12,25 @@ class PoEConfig:
     bb_binary: str = "bb"
     storage_dir: str = ""
     num_miners: int = 64
+    max_response_bytes: int = 1_048_576  # 1MB
 
     @classmethod
-    def from_poe_root(cls, poe_root: str, storage_dir: str = "/tmp/poe-proofs", **kwargs):
+    def from_poe_root(
+        cls,
+        poe_root: str,
+        storage_dir: str = "/tmp/poe-proofs",
+        build_mode: str = "debug",
+        **kwargs,
+    ):
         root = Path(poe_root)
         return cls(
             circuit_dir=str(root / "poe_circuit"),
             commitment_helper_dir=str(root / "commitment_helper"),
-            witness_binary=str(root / "poe-witness" / "target" / "debug" / "poe-witness"),
-            nargo_binary=str(Path.home() / ".nargo" / "bin" / "nargo"),
-            bb_binary=str(Path.home() / ".bb" / "bb"),
+            witness_binary=str(
+                root / "poe-witness" / "target" / build_mode / "poe-witness"
+            ),
+            nargo_binary=shutil.which("nargo") or "nargo",
+            bb_binary=shutil.which("bb") or "bb",
             storage_dir=storage_dir,
             **kwargs,
         )

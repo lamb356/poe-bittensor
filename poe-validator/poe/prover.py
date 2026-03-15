@@ -40,6 +40,11 @@ class PoEProver:
             raise ValueError(f"score must be non-negative int, got {score}")
         if uid in self._evaluations:
             raise ValueError(f"Duplicate UID {uid} in current epoch")
+        if len(response_bytes) > self.config.max_response_bytes:
+            raise ValueError(
+                f"response_bytes too large: {len(response_bytes)} bytes "
+                f"(max {self.config.max_response_bytes})"
+            )
         self._evaluations[uid] = (response_bytes, score)
 
     @property
@@ -70,10 +75,11 @@ class PoEProver:
             responses.append([0])
             scores.append(0)
 
-        # Truncate if more than num_miners
-        miner_uids = miner_uids[:n]
-        responses = responses[:n]
-        scores = scores[:n]
+        if len(miner_uids) > n:
+            raise ValueError(
+                f"Too many evaluations ({len(self._evaluations)}) for "
+                f"num_miners={n}. Call reset() between epochs."
+            )
 
         salt = secrets.randbelow(2**63)
 
