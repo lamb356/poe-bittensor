@@ -1,4 +1,6 @@
+import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,7 +20,7 @@ class PoEConfig:
     def from_poe_root(
         cls,
         poe_root: str,
-        storage_dir: str = "/tmp/poe-proofs",
+        storage_dir: str = "",
         build_mode: str = "debug",
         **kwargs,
     ):
@@ -31,6 +33,6 @@ class PoEConfig:
             ),
             nargo_binary=shutil.which("nargo") or "nargo",
             bb_binary=shutil.which("bb") or "bb",
-            storage_dir=storage_dir,
+            storage_dir=storage_dir or os.path.join(tempfile.gettempdir(), "poe-proofs"),
             **kwargs,
         )

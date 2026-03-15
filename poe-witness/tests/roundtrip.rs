@@ -4,14 +4,14 @@ use std::process::Command;
 
 fn nargo_bin() -> String {
     std::env::var("NARGO_BIN").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/burba".into());
+        let home = std::env::var("HOME").expect("HOME env var required");
         format!("{home}/.nargo/bin/nargo")
     })
 }
 
 fn bb_bin() -> String {
     std::env::var("BB_BIN").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/burba".into());
+        let home = std::env::var("HOME").expect("HOME env var required");
         format!("{home}/.bb/bb")
     })
 }
@@ -41,7 +41,7 @@ fn test_evaluation_data() -> EvaluationData {
         scores,
         epoch: 42,
         validator_id: 12345,
-        challenge_nonce: 77777,
+        challenge_nonce: "77777".to_string(),
         salt: 999,
     }
 }
@@ -112,8 +112,10 @@ fn test_full_roundtrip_prove_verify() {
     // Step 4: bb prove
     let circuit_json = format!("{}/target/poe_circuit.json", poe_circuit);
     let witness_gz = format!("{}/target/poe_circuit.gz", poe_circuit);
-    let proof_dir = "/tmp/poe_proof";
-    let proof_path = "/tmp/poe_proof/proof";
+    let proof_dir_path = std::env::temp_dir().join(format!("poe_proof_{}", std::process::id()));
+    let proof_dir = proof_dir_path.to_str().unwrap();
+    let proof_path_buf = proof_dir_path.join("proof");
+    let proof_path = proof_path_buf.to_str().unwrap();
     std::fs::create_dir_all(proof_dir).ok();
     let bb = bb_bin();
     let output = Command::new(&bb)
@@ -133,8 +135,10 @@ fn test_full_roundtrip_prove_verify() {
     );
 
     // Step 5: bb write_vk + bb verify
-    let vk_dir = "/tmp/poe_vk";
-    let vk_path = "/tmp/poe_vk/vk";
+    let vk_dir_path = std::env::temp_dir().join(format!("poe_vk_{}", std::process::id()));
+    let vk_dir = vk_dir_path.to_str().unwrap();
+    let vk_path_buf = vk_dir_path.join("vk");
+    let vk_path = vk_path_buf.to_str().unwrap();
     std::fs::create_dir_all(vk_dir).ok();
     let output = Command::new(&bb)
         .args([

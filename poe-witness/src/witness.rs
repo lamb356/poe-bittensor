@@ -27,7 +27,7 @@ pub fn generate_witness(data: &EvaluationData) -> WitnessData {
         score_commitment: "0".to_string(),
         epoch: data.epoch.to_string(),
         validator_id: data.validator_id.to_string(),
-        challenge_nonce: data.challenge_nonce.to_string(),
+        challenge_nonce: data.challenge_nonce.clone(),
         miner_uids: data.miner_uids.iter().map(|u| u.to_string()).collect(),
         response_hashes,
         scores: data.scores.iter().map(|s| s.to_string()).collect(),
@@ -92,7 +92,7 @@ fn validate_commitment(s: &str, name: &str) -> Result<(), String> {
         return Err(format!("{name} contains non-hex chars"));
     }
     // Check value < BN254 modulus
-    let val = BigUint::parse_bytes(s[2..].as_bytes(), 16)
+    let val = BigUint::parse_bytes(&s.as_bytes()[2..], 16)
         .ok_or_else(|| format!("{name} hex parse failed"))?;
     let modulus = BigUint::parse_bytes(
         b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001", 16
@@ -113,14 +113,17 @@ pub fn compute_commitments(
     use std::process::Command;
 
     // Write Prover.toml for the commitment helper
-    let prover_path = format!("{}/Prover.toml", commitment_helper_dir);
+    let unique_id = format!("{}_{}", std::process::id(), std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let prover_path = format!("{}/Prover_{}.toml", commitment_helper_dir, unique_id);
     let toml_content = to_commitment_helper_toml(witness);
     std::fs::write(&prover_path, &toml_content)
         .map_err(|e| format!("Failed to write Prover.toml: {}", e))?;
 
     // Run nargo execute
+    let prover_name = format!("Prover_{}", unique_id);
     let output = Command::new(nargo_bin)
-        .args(["execute", "--program-dir", commitment_helper_dir])
+        .args(["execute", "--prover-name", &prover_name, "--program-dir", commitment_helper_dir])
         .output()
         .map_err(|e| format!("Failed to run nargo: {}", e))?;
 

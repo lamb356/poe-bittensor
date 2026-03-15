@@ -22,6 +22,8 @@ class PoEProof:
     validator_id: int
     proof_bytes: bytes
     public_inputs: dict
+    public_inputs_bytes: bytes = b""
+    proof_mode: str = "local"  # "local" or "zkverify"
 
 
 class PoEProver:
@@ -36,8 +38,8 @@ class PoEProver:
         """Record a single miner evaluation."""
         if not isinstance(uid, int) or uid < 0 or uid >= 65536:
             raise ValueError(f"uid must be u16, got {uid}")
-        if not isinstance(score, int) or score < 0:
-            raise ValueError(f"score must be non-negative int, got {score}")
+        if not isinstance(score, int) or score < 0 or score > 65535:
+            raise ValueError(f"score must be u16 (0-65535), got {score}")
         if uid in self._evaluations:
             raise ValueError(f"Duplicate UID {uid} in current epoch")
         if len(response_bytes) > self.config.max_response_bytes:
@@ -89,9 +91,35 @@ class PoEProver:
             "scores": scores,
             "epoch": epoch,
             "validator_id": self.validator_id,
-            "challenge_nonce": challenge_nonce,
+            "challenge_nonce": str(challenge_nonce),
             "salt": salt,
         }
+
+    @staticmethod
+    def _parse_commitments(prover_toml_path: str) -> dict:
+        """Parse commitment values from a generated Prover.toml."""
+        commitments = {}
+        with open(prover_toml_path) as f:
+            for line in f:
+                for key in ("input_commitment", "weight_commitment", "score_commitment"):
+                    if line.startswith(f"{key} = "):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        commitments[key] = val
+        if len(commitments) != 3:
+            raise RuntimeError(f"Expected 3 commitments in {prover_toml_path}, found {len(commitments)}")
+        return commitments
+
+    def _build_public_inputs_bytes(self, commitments: dict, epoch: int, challenge_nonce: int) -> bytes:
+        """Encode 6 public inputs as 32-byte big-endian fields for zkVerify."""
+        parts = []
+        for name in ("input_commitment", "weight_commitment", "score_commitment"):
+            val = commitments[name]
+            n = int(val, 16) if val.startswith("0x") else int(val)
+            parts.append(n.to_bytes(32, "big"))
+        parts.append(epoch.to_bytes(32, "big"))
+        parts.append(self.validator_id.to_bytes(32, "big"))
+        parts.append(challenge_nonce.to_bytes(32, "big"))
+        return b"".join(parts)
 
     def prove(self, epoch: int, challenge_nonce: int, keccak_mode: bool = False) -> PoEProof:
         """Full proving pipeline: witness -> execute -> prove."""
@@ -101,7 +129,7 @@ class PoEProver:
         eval_data = self._build_eval_data(epoch, challenge_nonce)
 
         if sum(eval_data["scores"]) == 0:
-            raise ValueError("All scores are zero — proving would fail in nargo")
+            raise ValueError("All scores are zero \u2014 proving would fail in nargo")
 
         with tempfile.TemporaryDirectory(prefix="poe-") as tmpdir:
             # Step 1: Write evaluation data JSON
@@ -113,8 +141,11 @@ class PoEProver:
             prover_toml = os.path.join(tmpdir, "Prover.toml")
             self._run_witness(eval_json, prover_toml)
 
+            # Step 2.5: Parse commitments from generated Prover.toml
+            commitments = self._parse_commitments(prover_toml)
+
             # Step 3: Copy Prover.toml with unique name to avoid concurrency races
-            prover_name = f"poe_{epoch}_{int(time.time())}"
+            prover_name = f"poe_{epoch}_{secrets.token_hex(8)}"
             circuit_prover = os.path.join(
                 self.config.circuit_dir, f"{prover_name}.toml"
             )
@@ -149,7 +180,16 @@ class PoEProver:
             challenge_nonce=challenge_nonce,
             validator_id=self.validator_id,
             proof_bytes=proof_bytes,
-            public_inputs=eval_data,
+            public_inputs={
+                "input_commitment": commitments["input_commitment"],
+                "weight_commitment": commitments["weight_commitment"],
+                "score_commitment": commitments["score_commitment"],
+                "epoch": epoch,
+                "validator_id": self.validator_id,
+                "challenge_nonce": challenge_nonce,
+            },
+            public_inputs_bytes=self._build_public_inputs_bytes(commitments, epoch, challenge_nonce),
+            proof_mode="zkverify" if keccak_mode else "local",
         )
 
     def _run_witness(self, input_json: str, output_toml: str) -> None:

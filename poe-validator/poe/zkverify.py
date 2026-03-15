@@ -47,6 +47,7 @@ class ZkVerifySubmitter:
         proof_bytes: bytes,
         vk_path: str | None = None,
         public_inputs_path: str | None = None,
+        public_inputs_bytes: bytes | None = None,
     ) -> ZkVerifyResult:
         """Submit a proof to zkVerify. Handles retry internally."""
         with tempfile.TemporaryDirectory(prefix="poe-zkv-") as tmpdir:
@@ -70,14 +71,14 @@ class ZkVerifySubmitter:
                         "-b", circuit_json,
                         "-o", vk_dir,
                     ],
-                    check=True, capture_output=True,
+                    check=True, capture_output=True, timeout=60,
                 )
                 vk_path = os.path.join(vk_dir, "vk")
 
-            # Public inputs: extract from Prover.toml if not provided
+            # Public inputs: use provided bytes, path, or extract from Prover.toml
             if public_inputs_path is None:
                 public_inputs_path = os.path.join(tmpdir, "pubs")
-                pubs = self._extract_public_inputs()
+                pubs = public_inputs_bytes if public_inputs_bytes is not None else self._extract_public_inputs()
                 with open(public_inputs_path, "wb") as f:
                     f.write(pubs)
 
@@ -92,7 +93,7 @@ class ZkVerifySubmitter:
             ]
             env = {**os.environ, "ZKVERIFY_API_KEY": self.zkv_config.api_key}
 
-            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
             if result.returncode != 0:
                 raise RuntimeError(
                     f"poe-zkverify submit failed: {result.stderr}"
@@ -145,7 +146,7 @@ class ZkVerifySubmitter:
         ]
         env = {**os.environ, "ZKVERIFY_API_KEY": self.zkv_config.api_key}
 
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout + 30)
         if result.returncode != 0:
             raise RuntimeError(
                 f"poe-zkverify attest failed: {result.stderr}"

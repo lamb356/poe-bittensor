@@ -15,7 +15,7 @@ def config():
 
 def test_verifier_init(config):
     v = PoEVerifier(config)
-    assert v._vk_path is None
+    assert v._vk_paths == {}
 
 
 def test_verify_invalid_proof(config):

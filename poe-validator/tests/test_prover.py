@@ -44,7 +44,7 @@ def test_add_evaluation_invalid_uid(prover):
 
 
 def test_add_evaluation_invalid_score(prover):
-    with pytest.raises(ValueError, match="score must be non-negative"):
+    with pytest.raises(ValueError, match="score must be u16"):
         prover.add_evaluation(0, b"data", -1)
 
 
@@ -56,7 +56,7 @@ def test_build_eval_data(prover):
     assert len(data["responses"]) == 64
     assert len(data["scores"]) == 64
     assert data["epoch"] == 10
-    assert data["challenge_nonce"] == 12345
+    assert data["challenge_nonce"] == "12345"
     assert data["validator_id"] == 42
     # First 5 should be real, rest padded
     assert data["miner_uids"][:5] == [0, 1, 2, 3, 4]

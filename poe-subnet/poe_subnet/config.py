@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+BLOCK_TIME_SECONDS = 12  # Bittensor block time
+
 
 @dataclass
 class PoESubnetConfig:
     """Subnet-level configuration."""
 
     netuid: int = 0  # Set at registration time
-    tempo: int = 360  # Blocks per epoch (~1 hour at 10s/block)
+    tempo: int = 360  # Blocks per epoch (~72 min at 12s/block)
     proof_timeout: float = 30.0  # Seconds to wait for proof submission
     timeliness_window: int = 60  # Blocks after epoch end where full score applies
     timeliness_decay: float = 0.95  # Score multiplier per block past window

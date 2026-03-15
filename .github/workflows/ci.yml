@@ -98,12 +98,17 @@ jobs:
         run: |
           pip install pytest httpx blake3
           pip install -e poe-validator
-          pip install numpy bittensor || true  # bittensor may fail in CI, tests mock it
+
+      - name: Install bittensor
+        id: bt_install
+        run: pip install numpy bittensor
+        continue-on-error: true
 
       - name: Test poe-validator
         run: pytest poe-validator/tests/ -v
 
       - name: Test poe-subnet
+        if: steps.bt_install.outcome == 'success'
         run: |
           cd poe-subnet
-          PYTHONPATH=.:../poe-validator pytest tests/ -v || true  # some tests need bittensor runtime
+          PYTHONPATH=.:../poe-validator pytest tests/ -v

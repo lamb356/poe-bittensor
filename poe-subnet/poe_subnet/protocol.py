@@ -15,6 +15,9 @@ except ImportError:
             return None
 
 
+MAX_PROOF_BYTES = 20_480  # 20KB max raw proof size
+
+
 class ProofSubmission(_BaseSynapse):
     """Validator asks a miner to submit their PoE proof for a given epoch.
 
@@ -37,12 +40,25 @@ class ProofSubmission(_BaseSynapse):
     proof_timestamp: typing.Optional[float] = None
     zkverify_job_id: typing.Optional[str] = None
 
+    def decode_and_validate_proof(self) -> typing.Optional[bytes]:
+        """Decode base64 proof and validate size. Returns None if no proof."""
+        if self.proof_b64 is None:
+            return None
+        raw = base64.b64decode(self.proof_b64)
+        if len(raw) > MAX_PROOF_BYTES:
+            raise ValueError(
+                f"Proof too large: {len(raw)} bytes (max {MAX_PROOF_BYTES})"
+            )
+        return raw
+
     def deserialize(self) -> typing.Optional[dict]:
         if self.proof_b64 is None:
             return None
-        if len(self.proof_b64) > 25000:
+        # Base64 is ~4/3 of raw bytes; add margin
+        max_b64_len = (MAX_PROOF_BYTES * 4 // 3) + 100
+        if len(self.proof_b64) > max_b64_len:
             raise ValueError(
-                f"proof_b64 too large: {len(self.proof_b64)} chars (max 25000)"
+                f"proof_b64 too large: {len(self.proof_b64)} chars (max {max_b64_len})"
             )
         return {
             "proof_bytes": base64.b64decode(self.proof_b64),

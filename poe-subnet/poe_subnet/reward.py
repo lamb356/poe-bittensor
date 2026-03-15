@@ -6,7 +6,7 @@ import typing
 
 import numpy as np
 
-from poe_subnet.config import PoESubnetConfig
+from poe_subnet.config import BLOCK_TIME_SECONDS, PoESubnetConfig
 
 
 def reward(
@@ -35,8 +35,8 @@ def reward(
         # Submitted before epoch ended — early, full score
         return 1.0
 
-    # Convert delay to blocks (10s per block)
-    delay_blocks = delay / 10.0
+    # Convert delay to blocks
+    delay_blocks = delay / BLOCK_TIME_SECONDS
 
     if delay_blocks <= config.timeliness_window:
         # Within grace window — full score

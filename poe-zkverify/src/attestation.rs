@@ -40,6 +40,13 @@ impl AttestationReader {
             let url = format!("{}/job-status/{}", self.config.relayer_url, job_id);
             let resp = self.client.get(&url).send().await?;
 
+            // Fail fast on client errors (4xx) — permanent, no point retrying
+            if resp.status().is_client_error() {
+                let status = resp.status().as_u16();
+                let message = resp.text().await.unwrap_or_default();
+                return Err(ZkVerifyError::Api { status, message });
+            }
+
             if resp.status().is_success() {
                 let status: JobStatusResponse = resp.json().await?;
 

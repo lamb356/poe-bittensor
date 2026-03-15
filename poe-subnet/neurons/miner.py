@@ -66,7 +66,7 @@ class Miner:
         self.poe_subnet_config = PoESubnetConfig()
 
         # Proof cache per epoch
-        self._proof_cache: dict[int, dict] = {}
+        self._proof_cache: dict[tuple[int, int], dict] = {}
 
         # Set up axon
         self.axon = bt.Axon(wallet=self.wallet, config=self.config)
@@ -75,6 +75,11 @@ class Miner:
             blacklist_fn=self.blacklist,
             priority_fn=self.priority,
         )
+
+        self._prove_lock = asyncio.Lock()
+
+        # Optional zkVerify submitter (configured externally)
+        self.zkverify_submitter = None
 
         bt.logging.info(f"Miner initialized with UID {self.uid}")
 
@@ -90,9 +95,10 @@ class Miner:
         """Generate or return cached PoE proof for the requested epoch."""
         epoch = synapse.epoch
 
-        if epoch in self._proof_cache:
+        cache_key = (epoch, synapse.challenge_nonce)
+        if cache_key in self._proof_cache:
             bt.logging.debug(f"Returning cached proof for epoch {epoch}")
-            cached = self._proof_cache[epoch]
+            cached = self._proof_cache[cache_key]
             synapse.proof_b64 = cached["proof_b64"]
             synapse.public_inputs_json = cached["public_inputs_json"]
             synapse.proof_timestamp = cached["proof_timestamp"]
@@ -104,27 +110,38 @@ class Miner:
             bt.logging.warning("No evaluations accumulated, cannot prove")
             return synapse
 
-        try:
-            proof = self.prover.prove(epoch, synapse.challenge_nonce)
-            synapse.proof_b64 = ProofSubmission.encode_proof(proof.proof_bytes)
-            synapse.public_inputs_json = json.dumps(proof.public_inputs)
-            synapse.proof_timestamp = time.time()
+        async with self._prove_lock:
+            try:
+                proof = self.prover.prove(epoch, synapse.challenge_nonce)
+                synapse.proof_b64 = ProofSubmission.encode_proof(proof.proof_bytes)
+                synapse.public_inputs_json = json.dumps(proof.public_inputs)
+                synapse.proof_timestamp = time.time()
 
-            self._proof_cache[epoch] = {
-                "proof_b64": synapse.proof_b64,
-                "public_inputs_json": synapse.public_inputs_json,
-                "proof_timestamp": synapse.proof_timestamp,
-            }
+                # Submit to zkVerify if configured
+                if hasattr(self, 'zkverify_submitter') and self.zkverify_submitter is not None:
+                    try:
+                        zkv_result = self.zkverify_submitter.submit_proof(
+                            proof.proof_bytes,
+                            public_inputs_bytes=proof.public_inputs_bytes,
+                        )
+                        synapse.zkverify_job_id = zkv_result.job_id
+                    except Exception as e:
+                        bt.logging.warning(f"zkVerify submission failed (non-fatal): {e}")
 
-            # M-13: LRU eviction — keep at most 3 epochs
-            if len(self._proof_cache) > 3:
-                oldest = min(self._proof_cache.keys())
-                del self._proof_cache[oldest]
+                self._proof_cache[cache_key] = {
+                    "proof_b64": synapse.proof_b64,
+                    "public_inputs_json": synapse.public_inputs_json,
+                    "proof_timestamp": synapse.proof_timestamp,
+                }
 
-            self.prover.reset()
-            bt.logging.info(f"Proof generated: {len(proof.proof_bytes)} bytes")
-        except Exception as e:
-            bt.logging.error(f"Proof generation failed: {e}")
+                if len(self._proof_cache) > 3:
+                    oldest_key = next(iter(self._proof_cache))
+                    del self._proof_cache[oldest_key]
+
+                self.prover.reset()
+                bt.logging.info(f"Proof generated: {len(proof.proof_bytes)} bytes")
+            except Exception as e:
+                bt.logging.error(f"Proof generation failed: {e}")
 
         return synapse
 

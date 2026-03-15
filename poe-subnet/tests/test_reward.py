@@ -48,10 +48,10 @@ class TestReward:
     def test_within_grace_window(self, config):
         """Proof within timeliness window gets full score."""
         epoch_end = time.time()
-        # 30 blocks late = 300 seconds, within default 60-block window
+        # 30 blocks late = 360 seconds (at 12s/block), within default 60-block window
         score = reward(
             proof_valid=True,
-            proof_timestamp=epoch_end + 300,
+            proof_timestamp=epoch_end + 360,
             epoch_end_time=epoch_end,
             config=config,
         )
@@ -60,10 +60,10 @@ class TestReward:
     def test_past_grace_window_decays(self, config):
         """Proof past timeliness window gets decayed score."""
         epoch_end = time.time()
-        # 80 blocks late = 800 seconds, 20 blocks past the 60-block window
+        # 80 blocks late = 960 seconds (at 12s/block), 20 blocks past the 60-block window
         score = reward(
             proof_valid=True,
-            proof_timestamp=epoch_end + 800,
+            proof_timestamp=epoch_end + 960,
             epoch_end_time=epoch_end,
             config=config,
         )
@@ -74,10 +74,10 @@ class TestReward:
     def test_very_late_floors_at_minimum(self, config):
         """Extremely late proof floors at 0.01."""
         epoch_end = time.time()
-        # 1000 blocks late = 10000 seconds
+        # 1000 blocks late = 12000 seconds (at 12s/block)
         score = reward(
             proof_valid=True,
-            proof_timestamp=epoch_end + 10000,
+            proof_timestamp=epoch_end + 12000,
             epoch_end_time=epoch_end,
             config=config,
         )

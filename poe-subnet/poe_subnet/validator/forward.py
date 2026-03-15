@@ -85,8 +85,13 @@ def _verify_response(
     if response.proof_b64 is None:
         return {"proof_valid": False, "proof_timestamp": None}
 
-    proof_data = response.proof_bytes
-    if len(proof_data) < config.min_proof_size:
+    try:
+        proof_data = response.decode_and_validate_proof()
+    except (ValueError, Exception) as e:
+        bt.logging.debug(f"Proof decode/validation failed: {e}")
+        return {"proof_valid": False, "proof_timestamp": time.time()}
+
+    if proof_data is None or len(proof_data) < config.min_proof_size:
         bt.logging.debug(
             f"Proof too small: {len(proof_data)} bytes"
         )
@@ -96,6 +101,11 @@ def _verify_response(
         is_valid = validator.verifier.verify(proof_data)
     except Exception as e:
         bt.logging.warning(f"Proof verification error: {e}")
+        is_valid = False
+
+    # Require public_inputs_json — without it, epoch/nonce binding cannot be verified
+    if is_valid and not response.public_inputs_json:
+        bt.logging.warning("Valid proof rejected: missing public_inputs_json")
         is_valid = False
 
     # M-11: Validate epoch and nonce match current challenge

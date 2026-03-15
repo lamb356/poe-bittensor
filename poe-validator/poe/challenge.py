@@ -1,4 +1,4 @@
-"""Challenge nonce derivation — Drand beacon + BLAKE3 mixing."""
+"""Challenge nonce derivation \u2014 Drand beacon + BLAKE3 mixing."""
 from __future__ import annotations
 
 import hashlib
@@ -16,6 +16,7 @@ DRAND_API = f"https://api.drand.sh/{DRAND_CHAIN_HASH}"
 
 # Bittensor timing
 BLOCK_TIME = 12  # seconds per block
+BITTENSOR_GENESIS_TIMESTAMP = 1694710200  # Sep 14, 2023 \u2014 Bittensor finney genesis
 
 
 def get_challenge_nonce(
@@ -87,7 +88,7 @@ def _fetch_drand_randomness(
     import httpx
 
     epoch_start_block = genesis_block + epoch * tempo
-    epoch_start_time = epoch_start_block * BLOCK_TIME
+    epoch_start_time = BITTENSOR_GENESIS_TIMESTAMP + epoch_start_block * BLOCK_TIME
     drand_round = max(1, (epoch_start_time - DRAND_GENESIS) // DRAND_PERIOD + 1)
 
     url = f"{DRAND_API}/public/{drand_round}"

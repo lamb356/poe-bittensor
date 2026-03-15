@@ -19,8 +19,8 @@ evaluation functions on miner outputs, rather than copying weights from other va
 - `commitment_helper/` -- Noir circuit that computes Poseidon2 commitments (used by poe-witness)
 - `tla/` -- TLA+ formal verification of PoE protocol (3.1M states, all invariants pass)
 - `poe-validator/` -- Piece 4: Python validator integration (19 tests, E2E prove+verify)
-- `poe-subnet/` -- Piece 5: Bittensor subnet scaffold (37 tests, axon/dendrite proof roundtrip)
-- `poe-zkverify/` -- Piece 6: zkVerify bridge (22 tests, retry with backoff, CLI binary)
+- `poe-subnet/` -- Piece 5: Bittensor subnet scaffold (41 tests, axon/dendrite proof roundtrip)
+- `poe-zkverify/` -- Piece 6: zkVerify bridge (23 tests, retry with backoff, CLI binary)
 
 ## Key Constraints
 - Gate budget: 500K-1M gates (2^19 to 2^20) -> 10-20s proving on UltraHonk
@@ -64,8 +64,8 @@ Piece 8: Mainnet launch prep
 - `cd commitment_helper && nargo test` -- commitment computation test
 - `cd tla && java -jar ~/.tlaplus/tla2tools.jar -workers auto -deadlock PoE.tla` -- TLA+ verification
 - `cd poe-validator && source .venv/bin/activate && pytest tests/` -- validator integration (19 tests)
-- `cd poe-subnet && source .venv/bin/activate && PYTHONPATH=. pytest tests/` -- subnet scaffold (37 tests)
-- `cd poe-zkverify && cargo test` -- zkVerify bridge (22 tests)
+- `cd poe-subnet && source .venv/bin/activate && PYTHONPATH=. pytest tests/` -- subnet scaffold (41 tests)
+- `cd poe-zkverify && cargo test` -- zkVerify bridge (23 tests)
 
 ## Toolchain (WSL2)
 - Noir: nargo 1.0.0-beta.9 (via noirup)

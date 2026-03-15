@@ -11,7 +11,7 @@ pub struct EvaluationData {
     pub scores: Vec<u64>,
     pub epoch: u64,
     pub validator_id: u64,
-    pub challenge_nonce: u64,
+    pub challenge_nonce: String,
     pub salt: u64,
 }
 
