@@ -23,15 +23,17 @@ PoE eliminates copying, redistributing that value back to honest validators. The
 
 | Parameter | Value |
 |-----------|-------|
-| Registration lock | ~1,000 TAO (varies by market) |
-| At $207-238/TAO | ~$207,000-238,000 |
-| Lock duration | Permanent (recovered on deregistration) |
+| Registration burn | ~1,090 TAO (varies by market, as of March 2026) |
+| At $207-238/TAO | ~$226,000-259,000 |
+| Recovery | **None — permanently destroyed** (since October 2025) |
 
 ### Is It Worth It?
 
-The registration cost is a lock, not a burn. If the subnet generates sufficient staking demand, the locked TAO continues earning staking rewards. The real cost is opportunity cost.
+The registration cost is a **permanent burn** — the TAO is destroyed, not recoverable on deregistration. This changed in October 2025; older documentation may incorrectly describe it as a recoverable lock.
 
-**Break-even analysis**: If the PoE subnet captures just 0.1% of daily network emissions (7.2 TAO/day), validators and miners on the subnet earn ~2,628 TAO/year. At current prices, this is $544K-625K — well above the registration lock.
+**Break-even analysis**: The ~1,090 TAO burn (~$226-259K) is a sunk cost. If the PoE subnet captures just 0.1% of daily network emissions (7.2 TAO/day), validators and miners on the subnet earn ~2,628 TAO/year. At current prices, this is $544K-625K/year in ongoing emissions — the burn is recovered in emission value within 6-12 months at moderate adoption.
+
+**Risk**: If the subnet fails to attract staking demand and gets pruned under Dynamic TAO, the burned TAO is gone with no recovery. This is why the service-layer fallback (PoE as a library, no subnet registration) exists.
 
 ## Emission Projections
 
@@ -45,12 +47,12 @@ The registration cost is a lock, not a burn. If the subnet generates sufficient 
 
 ### PoE Subnet Emission Scenarios
 
-| Scenario | Network Attention | Daily Emission | Annual | Break-even |
-|----------|------------------|----------------|--------|------------|
-| Minimum viable | 0.05% | 3.6 TAO | 1,314 TAO | 2.6 years |
-| Moderate adoption | 0.1% | 7.2 TAO | 2,628 TAO | 1.3 years |
-| Strong adoption | 0.5% | 36 TAO | 13,140 TAO | 28 days |
-| High adoption | 1.0% | 72 TAO | 26,280 TAO | 14 days |
+| Scenario | Network Attention | Daily Emission | Annual | Burn recovery (emission value) |
+|----------|------------------|----------------|--------|-------------------------------|
+| Minimum viable | 0.05% | 3.6 TAO | 1,314 TAO | ~2.6 years |
+| Moderate adoption | 0.1% | 7.2 TAO | 2,628 TAO | ~1.3 years |
+| Strong adoption | 0.5% | 36 TAO | 13,140 TAO | ~28 days |
+| High adoption | 1.0% | 72 TAO | 26,280 TAO | ~14 days |
 
 "Network attention" = fraction of total TAO staked on the PoE subnet's alpha token.
 
@@ -128,7 +130,7 @@ Even at a 1% copying rate, annual emission drain is ~$2.5M. PoE's total annual c
 
 ### What If TAO Price Drops?
 
-All costs are denominated in TAO, not USD. A 50% price drop halves the USD cost of registration AND halves the emission value — the ratio stays the same. The economics are price-invariant in TAO terms.
+The registration burn is denominated in TAO, not USD. A 50% TAO price drop halves the USD cost of the burn AND halves the emission value — the break-even ratio stays the same. However, unlike a recoverable lock, a price recovery after burning doesn't restore the principal — the TAO is gone. The economics favor registration when the team has high confidence in achieving minimum viable staking demand quickly.
 
 ### What If zkVerify Fees Increase?
 

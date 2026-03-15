@@ -885,7 +885,7 @@ See Section 7 for detailed testnet plan.
 - Governance strategy: identify sympathetic Senate members, prepare BIT draft
 - Documentation: validator onboarding guide, subnet owner integration guide, API reference
 - Marketing: technical blog post, Bittensor Discord campaign, demo video
-- Mainnet registration (requires ~1,000 TAO lock, ~$207-238K at current prices)
+- Mainnet registration (requires ~1,090 TAO burn, ~$226-259K at current prices — permanent, not recoverable)
 
 ---
 
