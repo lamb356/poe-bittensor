@@ -7,6 +7,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -106,16 +107,32 @@ class PoEProver:
             prover_toml = os.path.join(tmpdir, "Prover.toml")
             self._run_witness(eval_json, prover_toml)
 
-            # Step 3: Copy Prover.toml into circuit dir
-            circuit_prover = os.path.join(self.config.circuit_dir, "Prover.toml")
+            # Step 3: Copy Prover.toml with unique name to avoid concurrency races
+            prover_name = f"poe_{epoch}_{int(time.time())}"
+            circuit_prover = os.path.join(
+                self.config.circuit_dir, f"{prover_name}.toml"
+            )
             shutil.copy2(prover_toml, circuit_prover)
 
-            # Step 4: nargo execute -> witness
-            self._run_nargo_execute()
+            try:
+                # Step 4: nargo execute -> witness (unique name avoids races)
+                self._run_nargo_execute(prover_name)
 
-            # Step 5: bb prove -> proof
-            proof_dir = os.path.join(tmpdir, "proof_out")
-            proof_file = self._run_bb_prove(proof_dir, keccak=keccak_mode)
+                # Step 5: bb prove -> proof
+                proof_dir = os.path.join(tmpdir, "proof_out")
+                proof_file = self._run_bb_prove(
+                    proof_dir, keccak=keccak_mode, witness_name=prover_name,
+                )
+            finally:
+                # Clean up unique prover TOML and witness
+                for f in [
+                    circuit_prover,
+                    os.path.join(self.config.circuit_dir, "target", f"{prover_name}.gz"),
+                ]:
+                    try:
+                        os.remove(f)
+                    except FileNotFoundError:
+                        pass
 
             # Read proof bytes
             with open(proof_file, "rb") as f:
@@ -145,9 +162,14 @@ class PoEProver:
                 f"stderr: {result.stderr}\nstdout: {result.stdout}"
             )
 
-    def _run_nargo_execute(self) -> None:
+    def _run_nargo_execute(self, prover_name: str = "Prover") -> None:
         """Run nargo execute in the circuit directory."""
-        cmd = [self.config.nargo_binary, "execute", "--program-dir", self.config.circuit_dir]
+        cmd = [
+            self.config.nargo_binary, "execute",
+            "--prover-name", prover_name,
+            "--program-dir", self.config.circuit_dir,
+            prover_name,  # witness output name
+        ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(
@@ -155,10 +177,12 @@ class PoEProver:
                 f"stderr: {result.stderr}\nstdout: {result.stdout}"
             )
 
-    def _run_bb_prove(self, proof_output_dir: str, keccak: bool = False) -> str:
+    def _run_bb_prove(
+        self, proof_output_dir: str, keccak: bool = False, witness_name: str = "poe_circuit",
+    ) -> str:
         """Run bb prove with UltraHonk. Returns path to proof file."""
         circuit_json = os.path.join(self.config.circuit_dir, "target", "poe_circuit.json")
-        witness_gz = os.path.join(self.config.circuit_dir, "target", "poe_circuit.gz")
+        witness_gz = os.path.join(self.config.circuit_dir, "target", f"{witness_name}.gz")
         os.makedirs(proof_output_dir, exist_ok=True)
         cmd = [
             self.config.bb_binary, "prove",
@@ -168,7 +192,7 @@ class PoEProver:
             "-o", proof_output_dir,
         ]
         if keccak:
-            cmd.extend(["--oracle_hash", "keccak"])
+            cmd.extend(["--zk", "--oracle_hash", "keccak"])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(

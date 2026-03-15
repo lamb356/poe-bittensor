@@ -19,7 +19,7 @@ pub struct ZkVerifyConfig {
 impl ZkVerifyConfig {
     pub fn testnet(api_key: String) -> Self {
         Self {
-            relayer_url: "https://relayer-api-testnet.horizenlabs.io/api/v1".into(),
+            relayer_url: "https://testnet.kurier.xyz/api/v1".into(),
             api_key,
             variant: UltrahonkVariant::Plain,
             tempo_seconds: 4320,
@@ -28,7 +28,7 @@ impl ZkVerifyConfig {
 
     pub fn mainnet(api_key: String) -> Self {
         Self {
-            relayer_url: "https://relayer-api-mainnet.horizenlabs.io/api/v1".into(),
+            relayer_url: "https://api.kurier.xyz/api/v1".into(),
             api_key,
             variant: UltrahonkVariant::Plain,
             tempo_seconds: 4320,

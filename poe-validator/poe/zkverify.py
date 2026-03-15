@@ -16,7 +16,7 @@ class ZkVerifyConfig:
     """Configuration for zkVerify bridge."""
     zkverify_binary: str = ""
     api_key: str = ""
-    relayer_url: str = "https://relayer-api-testnet.horizenlabs.io/api/v1"
+    relayer_url: str = "https://testnet.kurier.xyz/api/v1"
     variant: str = "plain"
     tempo_seconds: int = 4320
 

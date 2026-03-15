@@ -1011,6 +1011,8 @@ Requirements:
 - Gate budget management per-subnet
 - Versioned circuit IDs so upgrades don't break existing proofs
 
+**Verdict: FEASIBLE.** Noir's numeric generics allow parameterizing the circuit by subnet. Add `subnet_id` as a public input. Subnet owners register their VK on-chain; verifiers look up the correct VK by subnet. No dynamic dispatch needed — each subnet compiles its own circuit variant.
+
 ### Q2: Non-Deterministic Evaluation
 
 Some evaluation functions use randomness (e.g., sampling a subset of batches for Templar gradient eval).
@@ -1019,6 +1021,10 @@ Options:
 - Commit to the random seed and prove evaluation used that seed
 - Accept Lite PoE for non-deterministic subnets
 - Define a "deterministic core" (provable) and "stochastic shell" (not provable)
+
+**Verdict: SOLVED.** Commit to a Drand beacon round as the random seed. Derive per-miner randomness via Poseidon PRNG seeded with `Poseidon2(drand_round || miner_uid)`. This is deterministic given the beacon, verifiable in-circuit, and costs ~60K gates for 100 random samples.
+
+**Nonce design note:** For the challenge nonce specifically, we chose deterministic BLAKE3 (`BLAKE3(b"poe-challenge" || epoch_be8)`) over Drand. Rationale: the input commitment already cryptographically binds to actual miner responses, so challenge unpredictability is not needed for security. A copier who predicts the challenge still cannot produce a valid proof without the miner response data. BLAKE3 is simpler (no network dependency, no failure mode from beacon unavailability) and fully deterministic across all nodes. If future analysis shows challenge prediction enables a novel attack vector, switching to Drand is a one-line change in `challenge.py`.
 
 ### Q3: External API Calls in Evaluation
 
@@ -1029,17 +1035,23 @@ Options:
 - Prove score derivation FROM the API response, not the response itself
 - This is Lite PoE with extra commitment granularity
 
+**Verdict: SOLVED (hybrid).** Default to commit-reveal: hash the API response as a private input, prove score derivation from that hash. On random challenge (1-in-k epochs), require the validator to reveal the full API response for spot-check verification. This avoids proving the API call itself while still catching fabrication. Estimated cost: ~390K gates for the score-derivation circuit with response commitment.
+
 ### Q4: Recursive Proof Aggregation
 
 Instead of one proof per tempo, validators could produce incremental proofs per miner evaluation and aggregate via recursive verification.
 
 Noir supports recursive proof verification at ~257K gates per verify_proof call. This spreads proving cost over the entire tempo instead of a burst at the end. Worth exploring if per-tempo burst proving becomes a bottleneck for complex circuits.
 
+**Verdict: DO NOT PURSUE.** Benchmarking shows 2,957x overhead vs. direct proving for our current circuit size (~5.8K gates). Recursive verification only becomes viable when the inner circuit exceeds ~200K gates (where the 257K recursive overhead becomes proportionally small). For now, use parallel proving (multiple tempos in flight) and zkVerify's Merkle batching to amortize verification cost. Revisit if circuit complexity grows past 200K gates.
+
 ### Q5: ProxyZKP Approach
 
 The ProxyZKP paper (Nature Scientific Reports) proposes polynomial proxy models for verifiable decentralized ML. Instead of proving the full evaluation function, train a small polynomial approximation and prove THAT.
 
 This could dramatically reduce circuit complexity for ML-heavy evaluation functions (SN3, SN9). Worth investigating after the core protocol ships.
+
+**Verdict: NICHE.** Only viable for SN3 gradient integrity checks where a degree-4 polynomial proxy achieves acceptable accuracy. For general evaluation functions, proxy fitting introduces 10-15% accuracy loss that compounds with the approximation errors already present in time-weight decay (see SN8 eval module). Not recommended as a general strategy.
 
 ### Q6: ZKVM Alternative (RISC Zero / SP1)
 
@@ -1048,6 +1060,27 @@ Instead of writing evaluation functions as Noir circuits, run the evaluation fun
 Tradeoff: ZKVM proofs are larger and slower but support arbitrary computation without circuit design. Could be the path for complex evaluation functions that resist circuit decomposition.
 
 zkVerify already has production verifier pallets for both RISC Zero and SP1, so the verification infrastructure exists.
+
+**Verdict: RECOMMENDED as hybrid strategy.** Use Noir for simple-to-medium evaluation functions (linear scoring, weighted averages, threshold checks — up to ~50K gates). Use SP1 for complex evaluation functions that resist circuit decomposition (ML inference verification, multi-step API pipelines). zkVerify provides unified verification for both proof types, so the on-chain verifier doesn't need to know which prover was used.
+
+### 10.1: Research-Informed Roadmap
+
+Based on the research verdicts above, the following phased roadmap emerges:
+
+**Phase 1 — Current (Testnet Prep)**
+- Numeric generics for subnet-parameterized circuits (Q1)
+- `subnet_id` as public input for per-subnet VK binding
+- On-chain VK registry design (compatible with zkVerify attestation model)
+
+**Phase 2 — Testnet**
+- Commit-reveal protocol for API-dependent subnets (Q3)
+- Merkle tree for proof batching (replaces per-proof on-chain verification)
+- Parallel proving pipeline with zkVerify batching (Q4 alternative)
+
+**Phase 3 — Post-Testnet**
+- SP1 prover prototype for complex evaluation functions (Q6)
+- Proof-type-agnostic verification layer (Noir + SP1 through zkVerify)
+- Drand-seeded Poseidon PRNG for non-deterministic evaluation subnets (Q2)
 
 ---
 
