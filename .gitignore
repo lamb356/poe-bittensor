@@ -1,0 +1,44 @@
+# Rust
+target/
+Cargo.lock
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+.pytest_cache/
+
+# Noir build artifacts
+*.gz
+proof
+vk
+
+# Node
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TLA+ state files (large binary)
+tla/states/
+tla/*TTrace*.bin
+tla/*TTrace*.tla
+
+# Autoresearch logs
+autoresearch/results.tsv
+autoresearch/last-run.log
+
+# Secrets
+.env
+*.key
+
+# Claude internals
+.claude/
+Prover.toml
+Prover.toml
