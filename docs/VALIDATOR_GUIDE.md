@@ -150,7 +150,7 @@ cd poe-bittensor
 # Run all tests
 cd poe_circuit && nargo test          # 65 circuit tests
 cd ../poe-witness && cargo test       # 7 witness tests
-cd ../poe-validator && pytest tests/  # 19 tests (including E2E prove+verify)
+cd ../poe-validator && pytest tests/  # 27 tests (including E2E prove+verify)
 ```
 
 ## Performance

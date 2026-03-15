@@ -175,3 +175,45 @@ class TestWireFormat:
         assert encoded.isascii()
         # Verify it parses as JSON string
         json.dumps(encoded)
+
+
+class TestProofValidation:
+    """Tests for proof decode/validate hardening."""
+
+    def test_malformed_base64_returns_none_or_raises(self):
+        """Malformed base64 should raise or return None."""
+        synapse = ProofSubmission(
+            epoch=1, challenge_nonce=12345, subnet_uid=0,
+            proof_b64="not-valid-base64!!!"
+        )
+        # decode_and_validate_proof should raise on malformed base64
+        with pytest.raises(Exception):
+            synapse.decode_and_validate_proof()
+
+    def test_oversized_proof_rejected(self):
+        """Proof exceeding MAX_PROOF_BYTES should be rejected."""
+        from poe_subnet.protocol import MAX_PROOF_BYTES
+        big_proof = base64.b64encode(b"x" * (MAX_PROOF_BYTES + 1)).decode()
+        synapse = ProofSubmission(
+            epoch=1, challenge_nonce=12345, subnet_uid=0,
+            proof_b64=big_proof
+        )
+        with pytest.raises(ValueError, match="too large"):
+            synapse.decode_and_validate_proof()
+
+    def test_valid_proof_decode_succeeds(self):
+        """Valid base64 proof within size limit should decode."""
+        proof_data = b"valid proof data" * 100
+        synapse = ProofSubmission(
+            epoch=1, challenge_nonce=12345, subnet_uid=0,
+            proof_b64=base64.b64encode(proof_data).decode()
+        )
+        result = synapse.decode_and_validate_proof()
+        assert result == proof_data
+
+    def test_missing_proof_returns_none(self):
+        """No proof_b64 should return None from decode_and_validate_proof."""
+        synapse = ProofSubmission(
+            epoch=1, challenge_nonce=12345, subnet_uid=0,
+        )
+        assert synapse.decode_and_validate_proof() is None

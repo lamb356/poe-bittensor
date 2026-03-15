@@ -74,9 +74,10 @@ PoE operates in the validator's forward() loop, between miner evaluation and wei
 
 1. `input_commitment`: Poseidon2 hash binding miner UIDs, response hashes, challenge nonce, epoch, and salt
 2. `weight_commitment`: Poseidon2 hash binding weights, validator ID, and epoch
-3. `epoch`: Current epoch number (freshness)
-4. `validator_id`: Validator's UID (identity binding)
-5. `challenge_nonce`: Unpredictable nonce from Drand beacon (prevents pre-computation)
+3. `score_commitment`: Poseidon2 hash binding scores, response hashes, and epoch
+4. `epoch`: Current epoch number (freshness)
+5. `validator_id`: Validator's UID (identity binding)
+6. `challenge_nonce`: Deterministic BLAKE3 nonce derived from epoch (prevents replay)
 
 ### Verification Paths
 
@@ -146,14 +147,14 @@ Complete implementation: https://github.com/lamb356/poe-bittensor
 |-----------|----------|-------|
 | Noir circuit (7,845 gates) | `poe_circuit/` | 65 tests |
 | Rust witness generator | `poe-witness/` | 7 tests |
-| Python validator package | `poe-validator/` | 19 tests |
-| Bittensor subnet scaffold | `poe-subnet/` | 41 tests |
+| Python validator package | `poe-validator/` | 27 tests |
+| Bittensor subnet scaffold | `poe-subnet/` | 45 tests |
 | zkVerify bridge | `poe-zkverify/` | 23 tests |
 | Testnet campaign tools | `testnet/` | 15 tests |
 | TLA+ formal verification | `tla/` | 110M+ states, 0 violations |
 | Z3 arithmetic proofs | `tla/` | 6 invariants, all PASS |
 
-**Total: 160 tests, all passing.**
+**Total: 172 tests, all passing.**
 
 ## Security Considerations
 

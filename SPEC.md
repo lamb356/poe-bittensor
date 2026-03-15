@@ -46,7 +46,7 @@ A cheater can't produce this proof because they never talked to the miners. They
 
 **How it works, step by step:**
 
-1. At the start of each 72-minute epoch, the chain publishes a random challenge number (from the Drand beacon)
+1. At the start of each 72-minute epoch, a deterministic challenge nonce is computed from the epoch number via BLAKE3
 2. The validator queries miners, who incorporate the challenge into their responses
 3. The validator BLAKE3-hashes each response, scores them, and normalizes scores into a weight vector
 4. The validator feeds all of this into a Noir ZK circuit that produces a ~7.7 KB proof in under 60 seconds
@@ -259,7 +259,7 @@ The YC algorithm runs in `run_epoch.rs` through 8 sequential stages. PoE hooks i
 After the validator completes evaluation and before calling `set_weights()`, the PoE prover generates a proof binding the evaluation inputs to the weight vector. The proof hash is included in the weight commitment.
 
 **Hook 2: Post-reveal (Verification)**
-When weights are revealed at the Drand unlock, the PoE proof is verified. Weights without valid proofs are either rejected (hard mode) or penalized via reduced vtrust (soft mode).
+When weights are revealed, the PoE proof is verified. Weights without valid proofs are either rejected (hard mode) or penalized via reduced vtrust (soft mode).
 
 ### 3.3 Key Subtensor Internals
 
@@ -298,7 +298,7 @@ struct PoEPublicInputs {
     epoch: u64,                     // Tempo/epoch number (prevents replay)
     validator_id: Field,            // Poseidon(hotkey_bytes || epoch) — binds proof to identity
     eval_circuit_id: Field,         // Subnet-specific evaluation circuit ID (versioned)
-    challenge_nonce: Field,         // Drand-derived nonce for this epoch
+    challenge_nonce: Field,         // Deterministic BLAKE3 nonce for this epoch
 }
 
 // Private inputs (known only to prover/validator)
@@ -324,7 +324,7 @@ CONSTRAINT 1: Input Commitment Binding
 
   Purpose: Proves the validator had access to specific miner responses
   for this specific epoch. The challenge_nonce ties the commitment to
-  an unpredictable Drand output, preventing pre-computation.
+  a deterministic BLAKE3 hash of the epoch, preventing replay.
 
 CONSTRAINT 2: Score Computation (subnet-specific, pluggable)
   FOR each miner i:
@@ -416,12 +416,15 @@ This prevents pure weight copying — a copier has no miner responses to commit 
 
 ```
 1. EPOCH START (block N):
-   Chain emits challenge nonce from Drand beacon:
-   challenge_nonce = Drand_output(round_for_block_N)
+   Compute deterministic challenge nonce:
+   challenge_nonce = BLAKE3(b"poe-challenge" || epoch_bytes) & ((1 << 253) - 1)
+
+   The nonce is globally deterministic from the epoch number alone.
+   No network dependency, no Drand beacon. Every node computes the
+   same nonce for the same epoch.
 
 2. EVALUATION PHASE (blocks N to N+350):
-   Validator queries miners. Requests include challenge_nonce.
-   Miner responses incorporate challenge_nonce (hash of response includes it).
+   Validator queries miners.
    Validator evaluates and scores miners.
    Validator BLAKE3-hashes each miner response → response_hashes[].
 
@@ -438,14 +441,14 @@ This prevents pure weight copying — a copier has no miner responses to commit 
    Proof hash on-chain enables verification.
 
 5. VERIFICATION (next tempo):
-   When weights are revealed (Drand unlock):
+   When weights are revealed:
    - Peer validators fetch proof from shared storage
    - Verify proof against on-chain proof hash
    - Verify public inputs match revealed weights
    - Non-compliant validators: penalized via incentive mechanism
 ```
 
-The challenge_nonce from Drand is unpredictable, so a copier cannot pre-compute proofs before the epoch starts. The BLAKE3 response hashing ties the proof to actual miner responses.
+The challenge_nonce is deterministic but epoch-bound, preventing proof replay across epochs. The BLAKE3 response hashing ties the proof to actual miner responses. A copier who knows the nonce still cannot produce a valid proof without the miner response data.
 
 ---
 
@@ -576,7 +579,7 @@ poe_minimal/
 
 ### Piece 1: Core Lite PoE Circuit (Week 1-2)
 
-**Goal**: Scale Piece 0 from 8 miners to 64 miners, add Drand challenge nonce binding, split into proper module files, and harden for production use. Gate count targets are calibrated from Piece 0 measurements.
+**Goal**: Scale Piece 0 from 8 miners to 64 miners, add deterministic challenge nonce binding, split into proper module files, and harden for production use. Gate count targets are calibrated from Piece 0 measurements.
 
 **Prerequisite**: Piece 0 gate counts recorded. If 8-miner circuit was N gates, expect 64-miner circuit to be roughly 8×N (linear scaling from Poseidon2 sponge hashing + per-miner constraints).
 
@@ -680,7 +683,7 @@ pub struct EvaluationData {
     pub raw_scores: Vec<f64>,         // Scores before normalization
     pub epoch: u64,
     pub hotkey_bytes: [u8; 32],
-    pub challenge_nonce: [u8; 32],    // From Drand beacon
+    pub challenge_nonce: [u8; 32],    // BLAKE3(bpoe-challenge || epoch_bytes)
 }
 
 pub fn generate_witness(data: &EvaluationData) -> Result<NoirWitness, Error> {
@@ -756,7 +759,7 @@ poe-validator/
     prover.py            — Python wrapper around Rust prover binary (subprocess)
     verifier.py          — Verification logic for peer validators
     hooks.py             — Bittensor validator lifecycle hooks
-    challenge.py         — Drand challenge nonce fetching
+    challenge.py         — Deterministic BLAKE3 challenge nonce computation
     storage.py           — R2/IPFS proof publishing and retrieval
     config.py            — PoE configuration (enforcement level, storage backend)
   rust/
@@ -786,7 +789,7 @@ for uid, response in miner_responses.items():
 # Generate proof (~1-20s depending on circuit complexity)
 proof = prover.prove(
     epoch=self.metagraph.block // self.config.tempo,
-    challenge_nonce=get_drand_nonce(current_block),
+    challenge_nonce=get_challenge_nonce(current_epoch),
 )
 
 # Publish proof to shared storage
@@ -1024,7 +1027,7 @@ Options:
 
 **Verdict: SOLVED.** Commit to a Drand beacon round as the random seed. Derive per-miner randomness via Poseidon PRNG seeded with `Poseidon2(drand_round || miner_uid)`. This is deterministic given the beacon, verifiable in-circuit, and costs ~60K gates for 100 random samples.
 
-**Nonce design note:** For the challenge nonce specifically, we chose deterministic BLAKE3 (`BLAKE3(b"poe-challenge" || epoch_be8)`) over Drand. Rationale: the input commitment already cryptographically binds to actual miner responses, so challenge unpredictability is not needed for security. A copier who predicts the challenge still cannot produce a valid proof without the miner response data. BLAKE3 is simpler (no network dependency, no failure mode from beacon unavailability) and fully deterministic across all nodes. If future analysis shows challenge prediction enables a novel attack vector, switching to Drand is a one-line change in `challenge.py`.
+**Nonce design (final):** The challenge nonce uses deterministic BLAKE3: `challenge_nonce = BLAKE3(b"poe-challenge" || epoch_be8) & ((1 << 253) - 1)`. The input commitment already cryptographically binds to actual miner responses, so challenge unpredictability is not needed for security. A copier who knows the nonce still cannot produce a valid proof without the miner response data. BLAKE3 is simpler (no network dependency, no failure mode from beacon unavailability) and fully deterministic across all nodes. This is the canonical implementation, not a fallback.
 
 ### Q3: External API Calls in Evaluation
 
@@ -1080,7 +1083,7 @@ Based on the research verdicts above, the following phased roadmap emerges:
 **Phase 3 — Post-Testnet**
 - SP1 prover prototype for complex evaluation functions (Q6)
 - Proof-type-agnostic verification layer (Noir + SP1 through zkVerify)
-- Drand-seeded Poseidon PRNG for non-deterministic evaluation subnets (Q2)
+- Drand-seeded Poseidon PRNG for non-deterministic evaluation subnets (Q2, future enhancement)
 
 ---
 

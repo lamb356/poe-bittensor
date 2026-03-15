@@ -72,3 +72,38 @@ def test_reset(prover):
 def test_prove_empty_raises(prover):
     with pytest.raises(ValueError, match="No evaluations"):
         prover.prove(epoch=1, challenge_nonce=999)
+
+
+def test_add_evaluation_string_response_rejected(prover):
+    """String response_bytes should be rejected."""
+    with pytest.raises(TypeError, match="response_bytes must be bytes"):
+        prover.add_evaluation(0, "not bytes", 100)
+
+
+def test_add_evaluation_oversized_response_rejected(prover):
+    """Response exceeding max_response_bytes should be rejected."""
+    oversized = b"x" * (prover.config.max_response_bytes + 1)
+    with pytest.raises(ValueError, match="response_bytes too large"):
+        prover.add_evaluation(0, oversized, 100)
+
+
+def test_add_evaluation_score_too_large_rejected(prover):
+    """Score > 65535 should be rejected."""
+    with pytest.raises(ValueError, match="score must be u16"):
+        prover.add_evaluation(0, b"data", 70000)
+
+
+def test_prover_negative_validator_id_rejected():
+    """Negative validator_id should be rejected."""
+    from poe.config import PoEConfig
+    config = PoEConfig.from_poe_root(str(Path.home() / "poe-bittensor"))
+    with pytest.raises(ValueError, match="validator_id must be a non-negative"):
+        PoEProver(config, validator_id=-1)
+
+
+def test_prover_string_validator_id_rejected():
+    """String validator_id should be rejected."""
+    from poe.config import PoEConfig
+    config = PoEConfig.from_poe_root(str(Path.home() / "poe-bittensor"))
+    with pytest.raises(ValueError, match="validator_id must be a non-negative"):
+        PoEProver(config, validator_id="abc")

@@ -108,20 +108,39 @@ def _verify_response(
         bt.logging.warning("Valid proof rejected: missing public_inputs_json")
         is_valid = False
 
-    # M-11: Validate epoch and nonce match current challenge
+    # M-11: Validate public inputs match current challenge
     if is_valid and response.public_inputs_json:
         try:
             pub_inputs = json.loads(response.public_inputs_json)
-            proof_epoch = pub_inputs.get("epoch")
+
+            # Require all 6 public input fields
+            required = {
+                "input_commitment", "weight_commitment", "score_commitment",
+                "epoch", "validator_id", "challenge_nonce",
+            }
+            missing = required - set(pub_inputs.keys())
+            if missing:
+                bt.logging.warning(f"Missing public input fields: {missing}")
+                is_valid = False
+
+            # Verify epoch matches
+            if pub_inputs.get("epoch") != response.epoch:
+                bt.logging.warning(
+                    f"Epoch mismatch: proof={pub_inputs.get('epoch')}, expected={response.epoch}"
+                )
+                is_valid = False
+
+            # Verify challenge_nonce matches (compare as int to handle str vs int)
             proof_nonce = pub_inputs.get("challenge_nonce")
-            if proof_epoch is not None and proof_epoch != response.epoch:
-                bt.logging.warning(f"Epoch mismatch: proof={proof_epoch}, expected={response.epoch}")
+            if proof_nonce is not None and int(proof_nonce) != int(response.challenge_nonce):
+                bt.logging.warning(
+                    f"Nonce mismatch: proof={proof_nonce}, expected={response.challenge_nonce}"
+                )
                 is_valid = False
-            if proof_nonce is not None and proof_nonce != response.challenge_nonce:
-                bt.logging.warning(f"Nonce mismatch: proof={proof_nonce}, expected={response.challenge_nonce}")
-                is_valid = False
-        except (json.JSONDecodeError, TypeError):
-            pass
+
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            bt.logging.warning(f"Malformed public_inputs_json: {e}")
+            is_valid = False
 
     # H-11: Log zkVerify attestation status (soft enforcement)
     if response.zkverify_job_id:

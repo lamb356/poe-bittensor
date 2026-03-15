@@ -30,6 +30,8 @@ class PoEProver:
     """Accumulate miner evaluations and generate a ZK proof."""
 
     def __init__(self, config: PoEConfig, validator_id: int):
+        if not isinstance(validator_id, int) or validator_id < 0:
+            raise ValueError(f'validator_id must be a non-negative int, got {validator_id}')
         self.config = config
         self.validator_id = validator_id
         self._evaluations: dict[int, tuple[bytes, int]] = {}
@@ -40,6 +42,10 @@ class PoEProver:
             raise ValueError(f"uid must be u16, got {uid}")
         if not isinstance(score, int) or score < 0 or score > 65535:
             raise ValueError(f"score must be u16 (0-65535), got {score}")
+        if not isinstance(response_bytes, (bytes, bytearray)):
+            raise TypeError(
+                f'response_bytes must be bytes or bytearray, got {type(response_bytes).__name__}'
+            )
         if uid in self._evaluations:
             raise ValueError(f"Duplicate UID {uid} in current epoch")
         if len(response_bytes) > self.config.max_response_bytes:
@@ -125,6 +131,10 @@ class PoEProver:
         """Full proving pipeline: witness -> execute -> prove."""
         if not self._evaluations:
             raise ValueError("No evaluations accumulated")
+        # BN254 scalar field modulus
+        BN254_MODULUS = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
+        if not isinstance(challenge_nonce, int) or challenge_nonce < 0 or challenge_nonce >= BN254_MODULUS:
+            raise ValueError(f'challenge_nonce must fit in BN254 field (0 to {BN254_MODULUS - 1})')
 
         eval_data = self._build_eval_data(epoch, challenge_nonce)
 

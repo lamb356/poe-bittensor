@@ -4,6 +4,8 @@ import os
 import tempfile
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from monitor import CampaignMetrics, read_logs
 
@@ -75,3 +77,51 @@ class TestReadLogs:
             metrics = read_logs(tmpdir)
             assert metrics.honest_total == 5
             assert metrics.honest_passed == 5
+
+
+class TestAdditionalMetrics:
+    def test_per_strategy_tracking(self):
+        m = CampaignMetrics()
+        m.add_copier_by_strategy("naive", True)
+        m.add_copier_by_strategy("naive", False)
+        m.add_copier_by_strategy("delayed", True)
+        s = m.summary()
+        assert s["copier_by_strategy"]["naive"]["total"] == 2
+        assert s["copier_by_strategy"]["naive"]["detected"] == 1
+        assert s["copier_by_strategy"]["delayed"]["total"] == 1
+
+    def test_empty_directory_returns_empty_metrics(self):
+        """Empty log dir should return metrics with zero counts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            m = read_logs(tmpdir)
+            assert m.honest_total == 0
+            assert m.copier_total == 0
+
+    def test_missing_directory_returns_empty_metrics(self):
+        """Non-existent log dir should return empty metrics."""
+        m = read_logs("/nonexistent/path")
+        assert m.honest_total == 0
+
+    def test_copier_log_parsed_with_strategy(self):
+        """Copier log entries should be counted with strategy."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = os.path.join(tmpdir, "copier_naive.jsonl")
+            with open(log_file, "w") as f:
+                f.write(json.dumps({"has_valid_proof": False, "tempo": 0}) + "\n")
+                f.write(json.dumps({"has_valid_proof": True, "tempo": 1}) + "\n")
+            m = read_logs(tmpdir)
+            assert m.copier_total == 2
+            assert m.copier_detected == 1  # False -> detected
+            assert m.copier_by_strategy["naive"]["total"] == 2
+            assert m.copier_by_strategy["naive"]["detected"] == 1
+
+
+class TestSuccessCriteria:
+    def test_empty_data_fails_criteria(self):
+        """With no data, success criteria should FAIL (not pass by default)."""
+        m = CampaignMetrics()
+        s = m.summary()
+        # Honest pass rate with 0 total should NOT count as passing
+        # The print_summary checks honest_total >= MIN_HONEST
+        assert s["detection"]["honest_total"] == 0
+        assert s["detection"]["copier_total"] == 0

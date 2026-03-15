@@ -1,8 +1,8 @@
 #!/bin/bash
 # Orchestrate full PoE testnet campaign.
 #
-# Starts 3 honest validators + 3 copier agents, runs 100 tempos,
-# collects monitoring data, produces final report.
+# Starts 3 copier agents, verifies honest validators are running,
+# runs N tempos, collects monitoring data, produces final report.
 #
 # Usage:
 #   bash testnet/scripts/run_campaign.sh [--tempos 100] [--network test]
@@ -11,7 +11,7 @@ set -euo pipefail
 
 TEMPOS="${TEMPOS:-100}"
 NETWORK="${NETWORK:---network test}"
-NETUID="${NETUID:-1}"
+NETUID="${NETUID:?ERROR: NETUID must be set. Find it with: btcli subnet list}"
 POE_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LOG_DIR="$POE_ROOT/testnet/logs"
 PID_FILE="$POE_ROOT/testnet/.pids"
@@ -57,6 +57,30 @@ python "$POE_ROOT/testnet/scripts/copier_agents.py" \
     --honest-fraction 0.1 --num-tempos "$TEMPOS" --log-dir "$LOG_DIR" &
 echo $! >> "$PID_FILE"
 echo "  partial copier: PID $!"
+
+echo ""
+echo "=== Verifying honest validators are running ==="
+# Check that honest validator neurons are running externally
+# They must be started separately (they run the actual Bittensor validator loop)
+HONEST_RUNNING=true
+for name in poe-validator-1 poe-validator-2 poe-validator-3; do
+    if ! pgrep -f "wallet.name $name" >/dev/null 2>&1; then
+        echo "  WARNING: Honest validator '$name' not detected"
+        HONEST_RUNNING=false
+    else
+        echo "  OK: $name is running"
+    fi
+done
+
+if [ "$HONEST_RUNNING" = false ]; then
+    echo ""
+    echo "ERROR: Honest validators must be running before starting campaign."
+    echo "Start them with:"
+    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-1"
+    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-2"
+    echo "  python neurons/miner.py --netuid $NETUID $NETWORK --wallet.name poe-validator-3"
+    exit 1
+fi
 
 echo ""
 echo "=== Waiting for campaign to complete ==="

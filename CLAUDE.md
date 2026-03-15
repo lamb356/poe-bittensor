@@ -18,8 +18,8 @@ evaluation functions on miner outputs, rather than copying weights from other va
 - `poe-witness/` -- Piece 2: Rust witness generator + BLAKE3 bridge + roundtrip test
 - `commitment_helper/` -- Noir circuit that computes Poseidon2 commitments (used by poe-witness)
 - `tla/` -- TLA+ formal verification of PoE protocol (110M+ states, all invariants pass)
-- `poe-validator/` -- Piece 4: Python validator integration (19 tests, E2E prove+verify)
-- `poe-subnet/` -- Piece 5: Bittensor subnet scaffold (41 tests, axon/dendrite proof roundtrip)
+- `poe-validator/` -- Piece 4: Python validator integration (27 tests, E2E prove+verify)
+- `poe-subnet/` -- Piece 5: Bittensor subnet scaffold (45 tests, axon/dendrite proof roundtrip)
 - `poe-zkverify/` -- Piece 6: zkVerify bridge (23 tests, retry with backoff, CLI binary)
 
 ## Key Constraints
@@ -63,8 +63,8 @@ Piece 8: Mainnet launch prep
 - `cd poe-witness && cargo test` -- witness generator tests (7 unit tests, plus roundtrip integration)
 - `cd commitment_helper && nargo test` -- commitment computation test
 - `cd tla && java -jar ~/.tlaplus/tla2tools.jar -workers auto -deadlock PoE.tla` -- TLA+ verification
-- `cd poe-validator && source .venv/bin/activate && pytest tests/` -- validator integration (19 tests)
-- `cd poe-subnet && source .venv/bin/activate && PYTHONPATH=. pytest tests/` -- subnet scaffold (41 tests)
+- `cd poe-validator && source .venv/bin/activate && pytest tests/` -- validator integration (27 tests)
+- `cd poe-subnet && source .venv/bin/activate && PYTHONPATH=. pytest tests/` -- subnet scaffold (45 tests)
 - `cd poe-zkverify && cargo test` -- zkVerify bridge (23 tests)
 
 ## Toolchain (WSL2)

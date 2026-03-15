@@ -50,6 +50,7 @@ class CampaignMetrics:
     copier_total: int = 0
     copier_detected: int = 0
     tempo_count: int = 0
+    copier_by_strategy: dict[str, dict] = field(default_factory=lambda: {})
 
     def add_honest(self, passed: bool, gen_time_ms: float, size: int, verify_ms: float):
         self.honest_total += 1
@@ -63,6 +64,13 @@ class CampaignMetrics:
         self.copier_total += 1
         if detected:
             self.copier_detected += 1
+
+    def add_copier_by_strategy(self, strategy: str, detected: bool):
+        if strategy not in self.copier_by_strategy:
+            self.copier_by_strategy[strategy] = {"total": 0, "detected": 0}
+        self.copier_by_strategy[strategy]["total"] += 1
+        if detected:
+            self.copier_by_strategy[strategy]["detected"] += 1
 
     def percentile(self, data: list[float], p: int) -> float:
         if not data:
@@ -95,12 +103,17 @@ class CampaignMetrics:
                 "copier_total": self.copier_total,
                 "copier_detection_rate": self.copier_detected / max(self.copier_total, 1),
             },
+            "copier_by_strategy": {
+                k: {"total": v["total"], "detected": v["detected"],
+                    "detection_rate": v["detected"] / max(v["total"], 1)}
+                for k, v in self.copier_by_strategy.items()
+            },
         }
 
     def print_summary(self):
         s = self.summary()
         print("\n" + "=" * 60)
-        print("PoE Testnet Campaign — Summary Report")
+        print("PoE Testnet Campaign \u2014 Summary Report")
         print("=" * 60)
 
         print(f"\nTempos completed: {s['tempos']}")
@@ -130,15 +143,26 @@ class CampaignMetrics:
         print(f"  Copiers: {d['copier_total']} total, "
               f"{d['copier_detection_rate']*100:.1f}% detected")
 
-        # Check against success criteria
+        # Per-strategy copier metrics
+        if self.copier_by_strategy:
+            print("\n--- Per-Strategy Detection ---")
+            for strategy, data in sorted(self.copier_by_strategy.items()):
+                rate = data["detected"] / max(data["total"], 1) * 100
+                print(f"  {strategy}: {data['detected']}/{data['total']} detected ({rate:.1f}%)")
+
+        # Check against success criteria with minimum sample requirements
         print("\n--- Success Criteria ---")
+        MIN_HONEST = 10
+        MIN_COPIER = 10
         criteria = [
-            ("Proof gen P95 < 60s", pg["p95_ms"] < 60000 if pg["p95_ms"] else True),
-            ("Proof size < 10KB", ps["mean_bytes"] < 10240 if ps["mean_bytes"] else True),
-            ("Verify < 100ms", v["p95_ms"] < 100 if v["p95_ms"] else True),
-            ("Honest pass rate > 99.9%", d["honest_pass_rate"] > 0.999 if d["honest_total"] else True),
-            ("Copier detection > 99%", d["copier_detection_rate"] > 0.99 if d["copier_total"] else True),
-            ("False positive < 0.1%", d["false_positive_rate"] < 0.001 if d["honest_total"] else True),
+            ("Proof gen P95 < 60s", pg["p95_ms"] < 60000 if pg["count"] >= MIN_HONEST else False),
+            ("Proof size < 10KB", ps["mean_bytes"] < 10240 if pg["count"] >= MIN_HONEST else False),
+            ("Verify < 100ms", v["p95_ms"] < 100 if pg["count"] >= MIN_HONEST else False),
+            ("Honest pass rate > 99.9%", d["honest_pass_rate"] > 0.999 if d["honest_total"] >= MIN_HONEST else False),
+            ("Copier detection > 99%", d["copier_detection_rate"] > 0.99 if d["copier_total"] >= MIN_COPIER else False),
+            ("False positive < 0.1%", d["false_positive_rate"] < 0.001 if d["honest_total"] >= MIN_HONEST else False),
+            ("Minimum honest samples", d["honest_total"] >= MIN_HONEST),
+            ("Minimum copier samples", d["copier_total"] >= MIN_COPIER),
         ]
         for name, passed in criteria:
             status = "PASS" if passed else "FAIL"
@@ -151,12 +175,26 @@ def read_logs(log_dir: str) -> CampaignMetrics:
     log_path = Path(log_dir)
 
     if not log_path.exists():
-        print(f"No logs found at {log_dir}")
+        print(f"WARNING: Log directory not found: {log_dir}")
         return metrics
 
-    for log_file in sorted(log_path.glob("*.jsonl")):
+    log_files = sorted(log_path.glob("*.jsonl"))
+    if not log_files:
+        print(f"WARNING: No .jsonl log files found in {log_dir}")
+        return metrics
+
+    for log_file in log_files:
         is_copier = "copier" in log_file.name
         is_honest = "honest" in log_file.name or "validator" in log_file.name
+
+        # Extract strategy from filename like "copier_naive.jsonl"
+        strategy = "unknown"
+        if "naive" in log_file.name:
+            strategy = "naive"
+        elif "delayed" in log_file.name:
+            strategy = "delayed"
+        elif "partial" in log_file.name:
+            strategy = "partial"
 
         with open(log_file) as f:
             for line in f:
@@ -169,6 +207,7 @@ def read_logs(log_dir: str) -> CampaignMetrics:
                     # Copier: detected if has_valid_proof is False
                     detected = not entry.get("has_valid_proof", False)
                     metrics.add_copier(detected)
+                    metrics.add_copier_by_strategy(strategy, detected)
                 elif is_honest or entry.get("has_valid_proof"):
                     gen_time = entry.get("proof_gen_time_ms", entry.get("elapsed_seconds", 0) * 1000)
                     size = entry.get("proof_size_bytes", 14244)

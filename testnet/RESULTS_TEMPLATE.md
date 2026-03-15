@@ -74,6 +74,26 @@
 ### Recommendations for mainnet
 -
 
+## Rollback / Abort Criteria
+
+| Condition | Action |
+|-----------|--------|
+| Proof gen P95 > 120s for 3+ consecutive tempos | Investigate proving pipeline, consider circuit downsize |
+| Honest pass rate < 95% | ABORT — debug verification pipeline |
+| False positive rate > 5% | ABORT — review verification logic |
+| Copier detection < 50% for naive strategy | ABORT — fundamental protocol failure |
+| Network errors > 10% of requests | Investigate connectivity, retry with longer timeout |
+| Out-of-memory during proving | Reduce num_miners or increase RAM allocation |
+
+## Required Artifacts
+
+Before publishing results:
+- [ ] `testnet/logs/campaign_report.json` — machine-readable metrics
+- [ ] Per-agent JSONL logs for all honest validators and copier agents
+- [ ] Gate count verification (`bb gates` output matching 7,845)
+- [ ] Circuit compilation artifact (`poe_circuit/target/poe_circuit.json`)
+- [ ] Git commit hash of the exact code version tested
+
 ## Raw Data
 
 Campaign report JSON: `testnet/logs/campaign_report.json`
