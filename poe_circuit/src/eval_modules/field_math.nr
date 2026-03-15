@@ -67,7 +67,7 @@ fn fixed_mul_trunc(a: Field, b: Field) -> Field {
 /// Segment 2 (x in [0.75, 2.0]): Chebyshev degree-4. Max error 0.02%.
 /// Segment 3 (x >= 2.0): Returns 0 (caller adds baseline).
 pub fn piecewise_exp_neg(x: Field) -> Field {
-    let seg1_end: Field = 750000;  // 0.75 in fixed-point
+    let seg1_end: Field = 750000; // 0.75 in fixed-point
     let seg2_end: Field = 2000000; // 2.0 in fixed-point
 
     if !bounded_lt::<32>(seg1_end, x) {
@@ -188,7 +188,10 @@ pub fn signed_add(a: SignedField, b: SignedField) -> SignedField {
 
 /// Subtract: a - b = a + (-b)
 pub fn signed_sub(a: SignedField, b: SignedField) -> SignedField {
-    signed_add(a, SignedField { magnitude: b.magnitude, is_negative: !b.is_negative })
+    signed_add(
+        a,
+        SignedField { magnitude: b.magnitude, is_negative: !b.is_negative },
+    )
 }
 
 /// Multiply two signed values (fixed-point)

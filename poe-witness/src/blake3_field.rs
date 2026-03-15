@@ -2,8 +2,7 @@ use num_bigint::BigUint;
 
 /// BN254 scalar field modulus (approximately 2^254)
 /// p = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-const BN254_MODULUS_HEX: &str =
-    "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+const BN254_MODULUS_HEX: &str = "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
 
 /// BLAKE3 hash raw bytes using XOF mode for 512-bit output, then reduce to BN254 field element.
 /// Using 512 bits (double the ~254-bit modulus) ensures modular reduction bias < 2^-250.
@@ -47,8 +46,7 @@ mod tests {
     fn test_hash_within_field() {
         let result = hash_response_to_field(b"test data");
         let val = result.parse::<BigUint>().unwrap();
-        let modulus =
-            BigUint::parse_bytes(BN254_MODULUS_HEX.as_bytes(), 16).unwrap();
+        let modulus = BigUint::parse_bytes(BN254_MODULUS_HEX.as_bytes(), 16).unwrap();
         assert!(val < modulus);
     }
 }

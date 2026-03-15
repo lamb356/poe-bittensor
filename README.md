@@ -10,16 +10,16 @@ Proof-of-Evaluation (PoE) is a ZK protocol that cryptographically proves Bittens
 | Proof size | 14,244 bytes |
 | Proving time | <0.5s (64 miners, commodity hardware) |
 | Verification time | ~45ms constant |
-| Circuit tests | 84 (including 20 fuzz + 8 adversarial) |
-| Total tests | 174 across all packages |
-| TLA+ states verified | 78M+ (4 honest, 3 copier, 5 miner, 5 epoch model) |
+| Circuit tests | 70 (including 20 fuzz + 8 adversarial) |
+| Total tests | 160 across all packages |
+| TLA+ states verified | 110M+ (4 honest, 3 copier, 5 miner, 5 epoch model) |
 
 ## Project Structure
 
 ```
 poe-bittensor/
   poe_minimal/         Piece 0: 8-miner circuit (toolchain validation)
-  poe_circuit/         Piece 1: 64-miner Lite PoE circuit (7,845 gates, 73 tests)
+  poe_circuit/         Piece 1: 64-miner Lite PoE circuit (7,845 gates, 65 tests)
   commitment_helper/   Noir circuit for Poseidon2 commitment computation
   poe-witness/         Piece 2: Rust witness generator (BLAKE3 + normalization)
   poe-validator/       Piece 4: Python package for Bittensor validator integration
@@ -81,7 +81,7 @@ cd poe-witness && cargo build && cd ..
 cd poe-validator && pip install -e '.[dev]' && cd ..
 
 # 5. Run tests
-cd poe_circuit && nargo test          # 73 circuit tests (+ 10 minimal, 1 commitment)
+cd poe_circuit && nargo test          # 65 circuit tests (+ 4 minimal, 1 commitment)
 cd ../poe-witness && cargo test       # 7 unit tests (+ roundtrip integration)
 cd ../poe-validator && pytest tests/  # 19 validator tests (including E2E)
 ```

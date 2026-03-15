@@ -1,5 +1,5 @@
-use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 use crate::eval_modules::field_math::bounded_lt;
+use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 
 // ============================================================
 // Threshold Evaluation (binary pass/fail scoring)

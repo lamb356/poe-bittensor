@@ -14,10 +14,10 @@ evaluation functions on miner outputs, rather than copying weights from other va
 
 ## Project Structure
 - `poe_minimal/` -- Piece 0: 8-miner Lite PoE circuit (toolchain validation, 5,675 gates)
-- `poe_circuit/` -- Piece 1: 64-miner Lite PoE circuit (37,443 gates, 5 tests)
+- `poe_circuit/` -- Piece 1: 64-miner Lite PoE circuit (7,845 gates, 65 tests)
 - `poe-witness/` -- Piece 2: Rust witness generator + BLAKE3 bridge + roundtrip test
 - `commitment_helper/` -- Noir circuit that computes Poseidon2 commitments (used by poe-witness)
-- `tla/` -- TLA+ formal verification of PoE protocol (3.1M states, all invariants pass)
+- `tla/` -- TLA+ formal verification of PoE protocol (110M+ states, all invariants pass)
 - `poe-validator/` -- Piece 4: Python validator integration (19 tests, E2E prove+verify)
 - `poe-subnet/` -- Piece 5: Bittensor subnet scaffold (41 tests, axon/dendrite proof roundtrip)
 - `poe-zkverify/` -- Piece 6: zkVerify bridge (23 tests, retry with backoff, CLI binary)
@@ -59,8 +59,8 @@ Piece 7: Testnet campaign
 Piece 8: Mainnet launch prep
 
 ## Testing
-- `cd poe_circuit && nargo test` -- circuit tests (5 tests)
-- `cd poe-witness && cargo test` -- witness generator tests (9 tests, includes roundtrip)
+- `cd poe_circuit && nargo test` -- circuit tests (65 tests)
+- `cd poe-witness && cargo test` -- witness generator tests (7 unit tests, plus roundtrip integration)
 - `cd commitment_helper && nargo test` -- commitment computation test
 - `cd tla && java -jar ~/.tlaplus/tla2tools.jar -workers auto -deadlock PoE.tla` -- TLA+ verification
 - `cd poe-validator && source .venv/bin/activate && pytest tests/` -- validator integration (19 tests)

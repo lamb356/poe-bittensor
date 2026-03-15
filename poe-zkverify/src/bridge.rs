@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use reqwest::Client;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 use crate::hex_utils::bytes_to_hex;
 use crate::types::*;
@@ -37,7 +37,9 @@ impl ZkVerifyBridge {
             "vk": bytes_to_hex(vk_bytes),
         });
 
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&body)
             .send()
@@ -50,10 +52,7 @@ impl ZkVerifyBridge {
         }
 
         let result: serde_json::Value = resp.json().await?;
-        let vk_hash = result["vkHash"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let vk_hash = result["vkHash"].as_str().unwrap_or_default().to_string();
 
         info!(vk_hash = %vk_hash, "VK registered");
         Ok(vk_hash)
@@ -81,7 +80,9 @@ impl ZkVerifyBridge {
             }),
         };
 
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&request)
             .send()
@@ -131,7 +132,10 @@ impl ZkVerifyBridge {
                 });
             }
 
-            match self.submit_proof(proof_bytes, vk_bytes, public_inputs).await {
+            match self
+                .submit_proof(proof_bytes, vk_bytes, public_inputs)
+                .await
+            {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
                     // Don't retry on client errors (4xx) — those won't fix themselves
@@ -162,10 +166,7 @@ impl ZkVerifyBridge {
 
     /// Check the status of a submitted proof job.
     pub async fn check_job_status(&self, job_id: &str) -> Result<JobStatusResponse> {
-        let url = format!(
-            "{}/job-status/{}",
-            self.config.relayer_url, job_id
-        );
+        let url = format!("{}/job-status/{}", self.config.relayer_url, job_id);
 
         let resp = self.client.get(&url).send().await?;
 
@@ -182,8 +183,8 @@ impl ZkVerifyBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_config(server_url: &str) -> ZkVerifyConfig {
         ZkVerifyConfig {
@@ -228,9 +229,7 @@ mod tests {
             .await;
 
         let bridge = ZkVerifyBridge::new(test_config(&server.uri()));
-        let result = bridge
-            .submit_proof(b"bad-proof", b"vk", b"pubs")
-            .await;
+        let result = bridge.submit_proof(b"bad-proof", b"vk", b"pubs").await;
 
         assert!(result.is_err());
         match result.unwrap_err() {

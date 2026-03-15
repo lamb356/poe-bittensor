@@ -1,4 +1,4 @@
-use crate::types::{NUM_MINERS, MAX_WEIGHT, MIN_WEIGHT_SUM};
+use crate::types::{MAX_WEIGHT, MIN_WEIGHT_SUM, NUM_MINERS};
 
 // ============================================================
 // Optimized score-to-weight proportionality + weight sum verification
@@ -67,17 +67,14 @@ pub fn verify_weight_proportionality_and_sum(
 }
 
 // Keep the old API for backwards compatibility during transition
-pub fn verify_weight_proportionality(
-    scores: [Field; NUM_MINERS],
-    weights: [Field; NUM_MINERS],
-) {
+pub fn verify_weight_proportionality(scores: [Field; NUM_MINERS], weights: [Field; NUM_MINERS]) {
     verify_weight_proportionality_and_sum(scores, weights);
 }
 
 // ============================================================
 // Helper: compute weights from scores (for tests)
 // ============================================================
-unconstrained pub fn compute_weights(scores: [Field; NUM_MINERS]) -> [Field; NUM_MINERS] {
+pub unconstrained fn compute_weights(scores: [Field; NUM_MINERS]) -> [Field; NUM_MINERS] {
     // Use u64 arithmetic for integer truncating division (not Field modular inverse)
     let mut total: u64 = 0;
     for i in 0..NUM_MINERS {

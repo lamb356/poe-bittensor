@@ -2,7 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 use poe_witness::types::EvaluationData;
-use poe_witness::witness::{generate_witness, to_prover_toml, compute_commitments};
+use poe_witness::witness::{compute_commitments, generate_witness, to_prover_toml};
 
 #[derive(Parser)]
 #[command(name = "poe-witness")]

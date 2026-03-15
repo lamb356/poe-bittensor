@@ -1,4 +1,4 @@
-use crate::types::{NUM_MINERS, MAX_WEIGHT};
+use crate::types::{MAX_WEIGHT, NUM_MINERS};
 
 /// Normalize scores to u16 weights summing to ~65535.
 /// Uses floor(score * 65535 / total) — matches Noir circuit's integer division.
@@ -8,7 +8,10 @@ pub fn normalize_scores(scores: &[u64]) -> Vec<u64> {
     let total: u64 = scores.iter().sum();
     assert!(total > 0, "Total score must be nonzero");
 
-    scores.iter().map(|&s| ((s as u128) * (MAX_WEIGHT as u128) / (total as u128)) as u64).collect()
+    scores
+        .iter()
+        .map(|&s| ((s as u128) * (MAX_WEIGHT as u128) / (total as u128)) as u64)
+        .collect()
 }
 
 #[cfg(test)]

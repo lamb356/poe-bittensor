@@ -10,6 +10,6 @@ pub mod bridge;
 pub mod hex_utils;
 pub mod types;
 
-pub use bridge::ZkVerifyBridge;
 pub use attestation::AttestationReader;
-pub use types::{ZkVerifyConfig, UltrahonkVariant};
+pub use bridge::ZkVerifyBridge;
+pub use types::{UltrahonkVariant, ZkVerifyConfig};

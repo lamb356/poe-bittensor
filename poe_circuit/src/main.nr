@@ -3,10 +3,10 @@ mod commitment;
 mod normalization;
 mod eval_modules;
 
-use types::NUM_MINERS;
-use commitment::{compute_input_commitment, compute_weight_commitment, compute_score_commitment};
-use normalization::{verify_weight_proportionality, compute_weights};
+use commitment::{compute_input_commitment, compute_score_commitment, compute_weight_commitment};
 use eval_modules::interface::{EvalFunction, MAX_PARAMS};
+use normalization::{compute_weights, verify_weight_proportionality};
+use types::NUM_MINERS;
 
 // ============================================================
 // Lite PoE Circuit -- Proof-of-Evaluation for Bittensor
@@ -17,7 +17,7 @@ fn main(
     // Public inputs
     input_commitment: pub Field,
     weight_commitment: pub Field,
-    score_commitment: pub Field,    // C-01: Score commitment binding
+    score_commitment: pub Field, // C-01: Score commitment binding
     epoch: pub Field,
     validator_id: pub Field,
     challenge_nonce: pub Field,
@@ -29,9 +29,8 @@ fn main(
     salt: Field,
 ) {
     // CONSTRAINT 1: Input commitment binding
-    let computed_ic = compute_input_commitment(
-        miner_uids, response_hashes, challenge_nonce, epoch, salt,
-    );
+    let computed_ic =
+        compute_input_commitment(miner_uids, response_hashes, challenge_nonce, epoch, salt);
     assert(computed_ic == input_commitment, "Input commitment mismatch");
 
     // CONSTRAINT 2: Score-to-weight proportionality + weight sum range check
@@ -77,10 +76,18 @@ fn test_scores() -> [Field; NUM_MINERS] {
     scores
 }
 
-fn test_salt() -> Field { 999 }
-fn test_epoch() -> Field { 42 }
-fn test_validator_id() -> Field { 12345 }
-fn test_challenge_nonce() -> Field { 77777 }
+fn test_salt() -> Field {
+    999
+}
+fn test_epoch() -> Field {
+    42
+}
+fn test_validator_id() -> Field {
+    12345
+}
+fn test_challenge_nonce() -> Field {
+    77777
+}
 
 // ============================================================
 // TEST 1: Honest validator passes
@@ -100,7 +107,19 @@ fn test_honest_validator() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -123,7 +142,19 @@ fn test_wrong_weights_rejected() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -146,7 +177,19 @@ fn test_wrong_responses_rejected() {
 
     hashes[0] = 9999;
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -168,7 +211,19 @@ fn test_replay_different_epoch_rejected() {
     let sc = compute_score_commitment(scores, hashes, epoch);
 
     let replayed_epoch: Field = 43;
-    main(ic, wc, sc, replayed_epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        replayed_epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -191,7 +246,19 @@ fn test_wrong_challenge_nonce_rejected() {
 
     // Verifier uses a different challenge nonce -- proof from wrong epoch/challenge
     let wrong_nonce: Field = 88888;
-    main(ic, wc, sc, epoch, vid, wrong_nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        wrong_nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -214,11 +281,13 @@ pub fn full_poe_verify<E>(
     weights: [Field; NUM_MINERS],
     salt: Field,
     eval_params: [Field; MAX_PARAMS],
-) where E: EvalFunction {
+)
+where
+    E: EvalFunction,
+{
     // CONSTRAINT 1: Input commitment binding (same as Lite PoE)
-    let computed_ic = compute_input_commitment(
-        miner_uids, response_hashes, challenge_nonce, epoch, salt,
-    );
+    let computed_ic =
+        compute_input_commitment(miner_uids, response_hashes, challenge_nonce, epoch, salt);
     assert(computed_ic == input_commitment, "Input commitment mismatch");
 
     // CONSTRAINT 2: Score computation (NEW -- Full PoE only)
@@ -278,8 +347,17 @@ fn test_full_poe_arithmetic() {
     let sc = compute_score_commitment(scores, hashes, epoch);
 
     full_poe_verify::<ArithmeticEval>(
-        ic, wc, sc, epoch, vid, nonce,
-        uids, hashes, weights, salt, eval_params,
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        weights,
+        salt,
+        eval_params,
     );
 }
 
@@ -304,8 +382,17 @@ fn test_full_poe_wrong_weights_rejected() {
     let sc = compute_score_commitment(scores, hashes, epoch);
 
     full_poe_verify::<ArithmeticEval>(
-        ic, wc, sc, epoch, vid, nonce,
-        uids, hashes, weights, salt, eval_params,
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        weights,
+        salt,
+        eval_params,
     );
 }
 
@@ -327,7 +414,19 @@ fn run_with_scores(scores: [Field; NUM_MINERS]) {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Edge case: one miner has zero score, others nonzero ---
@@ -407,7 +506,19 @@ fn test_edge_all_zero_scores() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Edge case: weight sum exactly 65535 (no rounding loss) ---
@@ -454,7 +565,19 @@ fn test_adversarial_fake_weights_correct_sum() {
     let wc = compute_weight_commitment(fake_weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, fake_weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        fake_weights,
+        salt,
+    );
 }
 
 // --- Adversarial: swap two miners' scores, keep original weights ---
@@ -480,7 +603,19 @@ fn test_adversarial_swapped_scores() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Adversarial: inflate one score, deflate another by same amount ---
@@ -506,7 +641,19 @@ fn test_adversarial_score_redistribution() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Adversarial: correct proof but different miner UIDs ---
@@ -529,7 +676,19 @@ fn test_adversarial_different_miner_uids() {
     // Change a UID -- input commitment will mismatch
     uids[0] = 9999;
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Adversarial: salt reuse across epochs produces different commitments ---
@@ -545,7 +704,10 @@ fn test_salt_reuse_different_epochs() {
     let ic_epoch43 = compute_input_commitment(uids, hashes, nonce, 43, salt);
 
     // Commitments must differ due to epoch binding
-    assert(ic_epoch42 != ic_epoch43, "Same salt + different epoch should produce different commitments");
+    assert(
+        ic_epoch42 != ic_epoch43,
+        "Same salt + different epoch should produce different commitments",
+    );
 }
 
 // --- Adversarial: different validator produces different weight commitment ---
@@ -578,7 +740,19 @@ fn test_adversarial_wrong_validator_id() {
     let sc = compute_score_commitment(scores, hashes, epoch);
 
     // Verifier checks with validator 67890 -- weight commitment won't match
-    main(ic, wc, sc, epoch, 67890, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        67890,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -620,7 +794,19 @@ fn test_fuzz_valid_scores() {
         let wc = compute_weight_commitment(weights, vid, epoch);
         let sc = compute_score_commitment(scores, hashes, epoch);
 
-        main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+        main(
+            ic,
+            wc,
+            sc,
+            epoch,
+            vid,
+            nonce,
+            uids,
+            hashes,
+            scores,
+            weights,
+            salt,
+        );
     }
 }
 
@@ -646,7 +832,19 @@ fn test_fuzz_tampered_weights_rejected() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // --- Fuzz: tamper with a single weight by +1 ---
@@ -669,5 +867,17 @@ fn test_fuzz_single_weight_off_by_one() {
     let wc = compute_weight_commitment(weights, vid, epoch);
     let sc = compute_score_commitment(scores, hashes, epoch);
 
-    main(ic, wc, sc, epoch, vid, nonce, uids, hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        sc,
+        epoch,
+        vid,
+        nonce,
+        uids,
+        hashes,
+        scores,
+        weights,
+        salt,
+    );
 }

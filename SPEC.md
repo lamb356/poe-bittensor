@@ -582,9 +582,9 @@ poe_minimal/
 
 **Measured Results** (completed, optimized):
 - 64-miner circuit: 662 ACIR opcodes, 7,845 UltraHonk gates
-- **85.0% gate reduction** from 37,443 via bounded range checks + UID/weight packing
+- **79% gate reduction** from 37,443 via bounded range checks + UID/weight packing
 - Proves in <0.5s on commodity hardware
-- All 54 circuit tests pass (including 20 fuzz + 8 adversarial tests)
+- All 65 circuit tests pass (including 20 fuzz + 8 adversarial tests)
 - Proof size: 14,244 bytes, verification: ~45ms constant
 
 **Optimization Notes** (critical finding for all Noir/UltraHonk circuits):

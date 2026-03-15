@@ -144,16 +144,16 @@ Complete implementation: https://github.com/lamb356/poe-bittensor
 
 | Component | Location | Tests |
 |-----------|----------|-------|
-| Noir circuit (7,845 gates) | `poe_circuit/` | 60 tests |
-| Rust witness generator | `poe-witness/` | 9 tests |
+| Noir circuit (7,845 gates) | `poe_circuit/` | 65 tests |
+| Rust witness generator | `poe-witness/` | 7 tests |
 | Python validator package | `poe-validator/` | 19 tests |
-| Bittensor subnet scaffold | `poe-subnet/` | 37 tests |
+| Bittensor subnet scaffold | `poe-subnet/` | 41 tests |
 | zkVerify bridge | `poe-zkverify/` | 23 tests |
 | Testnet campaign tools | `testnet/` | 15 tests |
-| TLA+ formal verification | `tla/` | 110M states, 0 violations |
+| TLA+ formal verification | `tla/` | 110M+ states, 0 violations |
 | Z3 arithmetic proofs | `tla/` | 6 invariants, all PASS |
 
-**Total: 166+ tests, all passing.**
+**Total: 160 tests, all passing.**
 
 ## Security Considerations
 

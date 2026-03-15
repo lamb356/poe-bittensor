@@ -69,10 +69,7 @@ fn main(
         weight_sum += weights[i];
     }
     assert(!weight_sum.lt(MIN_WEIGHT_SUM), "Weight sum too low");
-    assert(
-        weight_sum.lt(MAX_WEIGHT + 1),
-        "Weight sum exceeds 65535",
-    );
+    assert(weight_sum.lt(MAX_WEIGHT + 1), "Weight sum exceeds 65535");
 
     // -------------------------------------------------------
     // CONSTRAINT 4: Weight commitment binding
@@ -188,7 +185,17 @@ fn test_honest_validator() {
     let ic = compute_input_commitment(miner_uids, response_hashes, epoch, salt);
     let wc = compute_weight_commitment(weights, validator_id, epoch);
 
-    main(ic, wc, epoch, validator_id, miner_uids, response_hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        epoch,
+        validator_id,
+        miner_uids,
+        response_hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -212,7 +219,17 @@ fn test_wrong_weights_rejected() {
     // but weight proportionality (constraint 2) should fail
     let wc = compute_weight_commitment(weights, validator_id, epoch);
 
-    main(ic, wc, epoch, validator_id, miner_uids, response_hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        epoch,
+        validator_id,
+        miner_uids,
+        response_hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -235,7 +252,17 @@ fn test_wrong_responses_rejected() {
     // Fabricate response hashes -- input commitment will mismatch
     response_hashes[0] = 9999;
 
-    main(ic, wc, epoch, validator_id, miner_uids, response_hashes, scores, weights, salt);
+    main(
+        ic,
+        wc,
+        epoch,
+        validator_id,
+        miner_uids,
+        response_hashes,
+        scores,
+        weights,
+        salt,
+    );
 }
 
 // ============================================================
@@ -259,6 +286,14 @@ fn test_replay_different_epoch_rejected() {
     // sets it to 43, but commitments were for 42 => mismatch
     let replayed_epoch: Field = 43;
     main(
-        ic, wc, replayed_epoch, validator_id, miner_uids, response_hashes, scores, weights, salt,
+        ic,
+        wc,
+        replayed_epoch,
+        validator_id,
+        miner_uids,
+        response_hashes,
+        scores,
+        weights,
+        salt,
     );
 }

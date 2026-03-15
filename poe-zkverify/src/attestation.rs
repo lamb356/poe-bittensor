@@ -77,11 +77,7 @@ impl AttestationReader {
     }
 
     /// Check if a proof is included in an attestation's Merkle tree.
-    pub async fn is_proof_attested(
-        &self,
-        attestation_id: u64,
-        leaf_digest: &str,
-    ) -> Result<bool> {
+    pub async fn is_proof_attested(&self, attestation_id: u64, leaf_digest: &str) -> Result<bool> {
         match self.get_merkle_path(attestation_id, leaf_digest).await {
             Ok(_) => Ok(true),
             Err(ZkVerifyError::Api { status: 404, .. }) => Ok(false),
@@ -116,10 +112,7 @@ impl AttestationReader {
 ///
 /// The Merkle tree follows EigenDA's Merkle.sol convention:
 /// siblings are sorted lexicographically before hashing.
-pub fn verify_merkle_path_local(
-    merkle_path: &MerklePath,
-    leaf_digest: &str,
-) -> bool {
+pub fn verify_merkle_path_local(merkle_path: &MerklePath, leaf_digest: &str) -> bool {
     use sha3::{Digest, Keccak256};
 
     let current = match hex_to_bytes32(leaf_digest) {
@@ -180,8 +173,8 @@ fn hex_to_bytes32(s: &str) -> Option<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_config(server_url: &str) -> ZkVerifyConfig {
         ZkVerifyConfig {
@@ -298,7 +291,11 @@ mod tests {
         let leaf_b = [0x22u8; 32];
 
         // Sort and hash
-        let (left, right) = if leaf_a <= leaf_b { (leaf_a, leaf_b) } else { (leaf_b, leaf_a) };
+        let (left, right) = if leaf_a <= leaf_b {
+            (leaf_a, leaf_b)
+        } else {
+            (leaf_b, leaf_a)
+        };
         let mut hasher = Keccak256::new();
         hasher.update(left);
         hasher.update(right);
@@ -310,8 +307,14 @@ mod tests {
             leaf_index: 0,
         };
 
-        assert!(verify_merkle_path_local(&path, &format!("0x{}", hex::encode(leaf_a))));
+        assert!(verify_merkle_path_local(
+            &path,
+            &format!("0x{}", hex::encode(leaf_a))
+        ));
         // Wrong leaf should fail
-        assert!(!verify_merkle_path_local(&path, &format!("0x{}", hex::encode([0x33u8; 32]))));
+        assert!(!verify_merkle_path_local(
+            &path,
+            &format!("0x{}", hex::encode([0x33u8; 32]))
+        ));
     }
 }

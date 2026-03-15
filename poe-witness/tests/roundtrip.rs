@@ -1,5 +1,5 @@
 use poe_witness::types::{EvaluationData, NUM_MINERS};
-use poe_witness::witness::{generate_witness, to_prover_toml, compute_commitments};
+use poe_witness::witness::{compute_commitments, generate_witness, to_prover_toml};
 use std::process::Command;
 
 fn nargo_bin() -> String {
@@ -56,8 +56,16 @@ fn test_generate_witness_basic() {
     assert_eq!(witness.weights.len(), NUM_MINERS);
 
     // Verify weight sum is in valid range
-    let weight_sum: u64 = witness.weights.iter().map(|w| w.parse::<u64>().unwrap()).sum();
-    assert!(weight_sum >= 65535 - 63, "Weight sum {} too low", weight_sum);
+    let weight_sum: u64 = witness
+        .weights
+        .iter()
+        .map(|w| w.parse::<u64>().unwrap())
+        .sum();
+    assert!(
+        weight_sum >= 65535 - 63,
+        "Weight sum {} too low",
+        weight_sum
+    );
     assert!(weight_sum <= 65535, "Weight sum {} too high", weight_sum);
 }
 
@@ -70,8 +78,14 @@ fn test_commitment_computation() {
     compute_commitments(&mut witness, &commitment_helper_dir(), &nargo_bin())
         .expect("Commitment computation failed");
 
-    assert_ne!(witness.input_commitment, "0", "Input commitment not computed");
-    assert_ne!(witness.weight_commitment, "0", "Weight commitment not computed");
+    assert_ne!(
+        witness.input_commitment, "0",
+        "Input commitment not computed"
+    );
+    assert_ne!(
+        witness.weight_commitment, "0",
+        "Weight commitment not computed"
+    );
     assert!(
         witness.input_commitment.starts_with("0x"),
         "Input commitment should be hex"
@@ -121,10 +135,14 @@ fn test_full_roundtrip_prove_verify() {
     let output = Command::new(&bb)
         .args([
             "prove",
-            "--scheme", "ultra_honk",
-            "-b", &circuit_json,
-            "-w", &witness_gz,
-            "-o", proof_dir,
+            "--scheme",
+            "ultra_honk",
+            "-b",
+            &circuit_json,
+            "-w",
+            &witness_gz,
+            "-o",
+            proof_dir,
         ])
         .output()
         .expect("Failed to run bb prove");
@@ -143,9 +161,12 @@ fn test_full_roundtrip_prove_verify() {
     let output = Command::new(&bb)
         .args([
             "write_vk",
-            "--scheme", "ultra_honk",
-            "-b", &circuit_json,
-            "-o", vk_dir,
+            "--scheme",
+            "ultra_honk",
+            "-b",
+            &circuit_json,
+            "-o",
+            vk_dir,
         ])
         .output()
         .expect("Failed to run bb write_vk");
@@ -158,9 +179,12 @@ fn test_full_roundtrip_prove_verify() {
     let output = Command::new(&bb)
         .args([
             "verify",
-            "--scheme", "ultra_honk",
-            "-k", vk_path,
-            "-p", proof_path,
+            "--scheme",
+            "ultra_honk",
+            "-k",
+            vk_path,
+            "-p",
+            proof_path,
         ])
         .output()
         .expect("Failed to run bb verify");

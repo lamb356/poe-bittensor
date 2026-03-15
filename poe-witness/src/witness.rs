@@ -1,7 +1,7 @@
 use crate::blake3_field::hash_response_to_field;
-use num_bigint::BigUint;
 use crate::normalize::normalize_scores;
 use crate::types::{EvaluationData, WitnessData, NUM_MINERS};
+use num_bigint::BigUint;
 
 /// Generate witness data from raw evaluation data.
 /// Commitments are initially set to "0" -- they must be computed
@@ -46,7 +46,10 @@ pub fn to_commitment_helper_toml(w: &WitnessData) -> String {
     lines.push(format!("validator_id = \"{}\"", w.validator_id));
     lines.push(format!("salt = \"{}\"", w.salt));
     lines.push(format!("miner_uids = [{}]", format_array(&w.miner_uids)));
-    lines.push(format!("response_hashes = [{}]", format_array(&w.response_hashes)));
+    lines.push(format!(
+        "response_hashes = [{}]",
+        format_array(&w.response_hashes)
+    ));
     lines.push(format!("scores = [{}]", format_array(&w.scores)));
     lines.push(format!("weights = [{}]", format_array(&w.weights)));
 
@@ -65,7 +68,10 @@ pub fn to_prover_toml(w: &WitnessData) -> String {
     lines.push(format!("challenge_nonce = \"{}\"", w.challenge_nonce));
     lines.push(format!("salt = \"{}\"", w.salt));
     lines.push(format!("miner_uids = [{}]", format_array(&w.miner_uids)));
-    lines.push(format!("response_hashes = [{}]", format_array(&w.response_hashes)));
+    lines.push(format!(
+        "response_hashes = [{}]",
+        format_array(&w.response_hashes)
+    ));
     lines.push(format!("scores = [{}]", format_array(&w.scores)));
     lines.push(format!("weights = [{}]", format_array(&w.weights)));
 
@@ -95,8 +101,10 @@ fn validate_commitment(s: &str, name: &str) -> Result<(), String> {
     let val = BigUint::parse_bytes(&s.as_bytes()[2..], 16)
         .ok_or_else(|| format!("{name} hex parse failed"))?;
     let modulus = BigUint::parse_bytes(
-        b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001", 16
-    ).unwrap();
+        b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
+        16,
+    )
+    .unwrap();
     if val >= modulus {
         return Err(format!("{name} exceeds BN254 modulus"));
     }
@@ -113,8 +121,14 @@ pub fn compute_commitments(
     use std::process::Command;
 
     // Write Prover.toml for the commitment helper
-    let unique_id = format!("{}_{}", std::process::id(), std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let unique_id = format!(
+        "{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
     let prover_path = format!("{}/Prover_{}.toml", commitment_helper_dir, unique_id);
     let toml_content = to_commitment_helper_toml(witness);
     std::fs::write(&prover_path, &toml_content)
@@ -123,7 +137,13 @@ pub fn compute_commitments(
     // Run nargo execute
     let prover_name = format!("Prover_{}", unique_id);
     let output = Command::new(nargo_bin)
-        .args(["execute", "--prover-name", &prover_name, "--program-dir", commitment_helper_dir])
+        .args([
+            "execute",
+            "--prover-name",
+            &prover_name,
+            "--program-dir",
+            commitment_helper_dir,
+        ])
         .output()
         .map_err(|e| format!("Failed to run nargo: {}", e))?;
 

@@ -127,8 +127,5 @@ fn test_commitment_helper() {
         weights[i] = unsafe { floor_div(scores[i] * 65535, total) };
     }
 
-    main(
-        uids, hashes, scores, weights,
-        77777, 42, 12345, 999,
-    );
+    main(uids, hashes, scores, weights, 77777, 42, 12345, 999);
 }

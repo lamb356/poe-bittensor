@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
-use poe_zkverify::bridge::ZkVerifyBridge;
 use poe_zkverify::attestation::AttestationReader;
-use poe_zkverify::types::{ZkVerifyConfig, UltrahonkVariant};
+use poe_zkverify::bridge::ZkVerifyBridge;
+use poe_zkverify::types::{UltrahonkVariant, ZkVerifyConfig};
 
 #[derive(Parser)]
 #[command(name = "poe-zkverify")]
@@ -163,7 +163,10 @@ async fn main() {
             }
         }
 
-        Commands::Status { job_id, relayer_url } => {
+        Commands::Status {
+            job_id,
+            relayer_url,
+        } => {
             let config = ZkVerifyConfig {
                 relayer_url,
                 api_key: String::new(), // Not needed for status check

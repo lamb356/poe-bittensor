@@ -1,9 +1,8 @@
-use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 use crate::eval_modules::field_math::{
-    fixed_mul, fixed_div, sn8_compute_time_weight, verify_time_weight, bounded_lt,
-    SignedField, signed_pos, signed_neg, signed_zero,
-    signed_add, signed_sub, signed_mul, signed_lt,
+    bounded_lt, fixed_div, fixed_mul, signed_add, signed_lt, signed_mul, signed_neg, signed_pos,
+    signed_sub, signed_zero, SignedField, sn8_compute_time_weight, verify_time_weight,
 };
+use crate::eval_modules::interface::{EvalFunction, MAX_PARAMS};
 
 // ============================================================
 // SN8 (Taoshi PTN) PnL Evaluation Module
@@ -114,10 +113,7 @@ pub fn compute_max_drawdown(pnls: [SignedField; NUM_CHECKPOINTS]) -> SignedField
     max_dd
 }
 
-pub fn verify_time_weights(
-    time_weights: [Field; NUM_CHECKPOINTS],
-    tolerance: Field,
-) {
+pub fn verify_time_weights(time_weights: [Field; NUM_CHECKPOINTS], tolerance: Field) {
     for i in 0..NUM_CHECKPOINTS {
         verify_time_weight(time_weights[i], i as Field, tolerance);
     }

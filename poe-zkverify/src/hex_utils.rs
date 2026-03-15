@@ -2,7 +2,7 @@
 //!
 //! zkVerify expects 0x-prefixed lowercase hex strings.
 
-use crate::types::{ZkVerifyError, Result};
+use crate::types::{Result, ZkVerifyError};
 
 /// Encode raw bytes to 0x-prefixed lowercase hex string.
 pub fn bytes_to_hex(data: &[u8]) -> String {
